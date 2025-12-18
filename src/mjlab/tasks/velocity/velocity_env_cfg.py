@@ -130,10 +130,16 @@ def create_velocity_env_cfg(
       heading_command=True,  
       rel_heading_envs=0.3,  
       heading_control_stiffness=1.0, 
-      ranges=UniformVelocityCommandCfg.Ranges(
-        lin_vel_x=(-1.0, 1.0),  
-        lin_vel_y=(-1.0, 1.0),  
-        ang_vel_z=(-1.0, 1.0), 
+      # ranges=UniformVelocityCommandCfg.Ranges(
+      #   lin_vel_x=(-1.0, 1.0),  
+      #   lin_vel_y=(-1.0, 1.0),  
+      #   ang_vel_z=(-1.0, 1.0), 
+      #   heading=(-math.pi, math.pi),  
+      # ),
+      ranges=UniformVelocityCommandCfg.Ranges( #manually overriding here
+        lin_vel_x=(0.0, 0.0),  
+        lin_vel_y=(0.5, 0.5),  
+        ang_vel_z=(0.0, 0.0), 
         heading=(-math.pi, math.pi),  
       ),
     )
@@ -183,6 +189,7 @@ def create_velocity_env_cfg(
     # ---------------------------------------------------------------------------
     # TODO(b): add extra observations for the critic here.
     # Hint: Consider gait information such as foot contact, air time, or height.
+    
   }
 
   observations = {
