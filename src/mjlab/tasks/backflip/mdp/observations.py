@@ -27,6 +27,11 @@ def backflip_target_pitch_vel(env, command_name):
   return command[:, 3:4]
 
 
+def backflip_target_x(env, command_name):
+  command = env.command_manager.get_command(command_name)
+  return command[:, 5:6]
+
+
 def base_height(env, asset_cfg=_DEFAULT_ASSET_CFG):
   asset = env.scene[asset_cfg.name]
   return asset.data.root_link_pos_w[:, 2:3]

@@ -108,6 +108,10 @@ def create_backflip_env_cfg(
             func=mdp.backflip_target_pitch_vel,
             params={"command_name": "backflip"},
         ),
+        "target_x": ObservationTermCfg(
+            func=mdp.backflip_target_x,
+            params={"command_name": "backflip"},
+        ),
         "base_height": ObservationTermCfg(
             func=mdp.base_height,
             noise=Unoise(n_min=-0.02, n_max=0.02),
@@ -191,6 +195,15 @@ def create_backflip_env_cfg(
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
+        "track_x_position": RewardTermCfg(
+            func=mdp.track_x_position,
+            weight=1.5,
+            params={
+                "command_name": "backflip",
+                "std": 0.2,
+                "asset_cfg": SceneEntityCfg("robot"),
+            },
+        ),
         "track_pitch_velocity": RewardTermCfg(
             func=mdp.track_pitch_velocity,
             weight=3.0,
@@ -228,20 +241,6 @@ def create_backflip_env_cfg(
             weight=17.0,
             params={
                 "command_name": "backflip",
-                "asset_cfg": SceneEntityCfg("robot"),
-            },
-        ),
-        "rotation_consistency": RewardTermCfg(
-            func=mdp.rotation_consistency,
-            weight=2.0,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        ),
-        "crouch_incentive": RewardTermCfg(
-            func=mdp.crouch_incentive,
-            weight=3.0,
-            params={
-                "standing_height": standing_height,
-                "crouch_steps": 30,
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),

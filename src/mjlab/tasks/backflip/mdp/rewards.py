@@ -20,6 +20,17 @@ def track_height(env, command_name, std, asset_cfg=_DEFAULT_ASSET_CFG):
   return torch.exp(-height_error / (std**2))
 
 
+def track_x_position(env, command_name, std, asset_cfg=_DEFAULT_ASSET_CFG):
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  current_x = asset.data.root_link_pos_w[:, 0]
+  target_x = command[:, 5]
+  x_error = torch.square(current_x - target_x)
+
+  return torch.exp(-x_error / (std**2))
+
+
 def track_pitch_velocity(env, command_name, std, asset_cfg=_DEFAULT_ASSET_CFG):
   asset = env.scene[asset_cfg.name]
   command = env.command_manager.get_command(command_name)
@@ -107,16 +118,25 @@ def ground_contact_at_landing(env, command_name, sensor_name):
 
 
 def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Reward exploding backwards: upward velocity AND backward pitch velocity together."""
   asset = env.scene[asset_cfg.name]
   command = env.command_manager.get_command(command_name)
 
   phase = command[:, 0]
   vertical_vel = asset.data.root_link_lin_vel_w[:, 2]
+  pitch_vel = asset.data.root_link_ang_vel_b[:, 1]  # negative = backward rotation
 
-  takeoff_mask = (phase < 0.3).float()
-  upward_reward = torch.clamp(vertical_vel/7.0, 0.0, 1.0)
+  # Active after crouch (phi > 0.1) but before mid-flip (phi < 0.4)
+  takeoff_mask = ((phase >= 0.1) & (phase < 0.4)).float()
 
-  return takeoff_mask * upward_reward
+  # Reward upward velocity
+  upward_reward = torch.clamp(vertical_vel / 5.0, 0.0, 1.0)
+
+  # Reward backward pitch velocity (negative pitch_vel = backward)
+  backward_reward = torch.clamp(-pitch_vel / 8.0, 0.0, 1.0)
+
+  # Multiplicative: need BOTH to get full reward (explode backwards, not just jump)
+  return takeoff_mask * upward_reward * backward_reward
 
 
 def crouch_incentive(env, standing_height=0.35, crouch_steps=30, asset_cfg=_DEFAULT_ASSET_CFG):
