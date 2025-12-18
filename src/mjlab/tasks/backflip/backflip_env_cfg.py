@@ -202,7 +202,7 @@ def create_backflip_env_cfg(
         ),
         "phase_progress": RewardTermCfg(
             func=mdp.phase_progress,
-            weight=10.0, #beeg progress woooo
+            weight=10.0,
             params={"command_name": "backflip"},
         ),
         "upright_at_landing": RewardTermCfg(
@@ -220,12 +220,12 @@ def create_backflip_env_cfg(
         ),
         "off_axis": RewardTermCfg(
             func=mdp.off_axis_penalty,
-            weight=-0.5,
+            weight=-2.0,
             params={"asset_cfg": SceneEntityCfg("robot")},
         ),
         "takeoff_impulse": RewardTermCfg(
             func=mdp.takeoff_impulse,
-            weight=10.0, #beeg jump
+            weight=10.0,
             params={
                 "command_name": "backflip",
                 "asset_cfg": SceneEntityCfg("robot"),

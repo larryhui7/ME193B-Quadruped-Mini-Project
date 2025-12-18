@@ -113,9 +113,8 @@ def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   phase = command[:, 0]
   vertical_vel = asset.data.root_link_lin_vel_w[:, 2]
 
-  # Active from phase 0 to 0.3 (early flip / takeoff)
   takeoff_mask = (phase < 0.3).float()
-  upward_reward = torch.clamp(vertical_vel / 5.0, 0.0, 1.0)
+  upward_reward = torch.clamp(vertical_vel/7.0, 0.0, 1.0)
 
   return takeoff_mask * upward_reward
 
