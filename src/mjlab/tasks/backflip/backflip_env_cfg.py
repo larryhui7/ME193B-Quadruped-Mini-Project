@@ -202,7 +202,7 @@ def create_backflip_env_cfg(
         ),
         "phase_progress": RewardTermCfg(
             func=mdp.phase_progress,
-            weight=10.0,
+            weight=15.0,
             params={"command_name": "backflip"},
         ),
         "upright_at_landing": RewardTermCfg(
@@ -220,12 +220,12 @@ def create_backflip_env_cfg(
         ),
         "off_axis": RewardTermCfg(
             func=mdp.off_axis_penalty,
-            weight=-2.0,
+            weight=-5.0,
             params={"asset_cfg": SceneEntityCfg("robot")},
         ),
         "takeoff_impulse": RewardTermCfg(
             func=mdp.takeoff_impulse,
-            weight=10.0,
+            weight=17.0,
             params={
                 "command_name": "backflip",
                 "asset_cfg": SceneEntityCfg("robot"),
@@ -235,6 +235,15 @@ def create_backflip_env_cfg(
             func=mdp.rotation_consistency,
             weight=2.0,
             params={"asset_cfg": SceneEntityCfg("robot")},
+        ),
+        "crouch_incentive": RewardTermCfg(
+            func=mdp.crouch_incentive,
+            weight=3.0,
+            params={
+                "standing_height": standing_height,
+                "crouch_steps": 30,
+                "asset_cfg": SceneEntityCfg("robot"),
+            },
         ),
     }
 

@@ -119,6 +119,17 @@ def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   return takeoff_mask * upward_reward
 
 
+def crouch_incentive(env, standing_height=0.35, crouch_steps=30, asset_cfg=_DEFAULT_ASSET_CFG):
+  asset = env.scene[asset_cfg.name]
+  current_height = asset.data.root_link_pos_w[:, 2]
+
+  early_mask = (env.episode_length_buf < crouch_steps).float()
+
+  crouch_reward = torch.clamp((standing_height - current_height) / 0.15, 0.0, 1.0)
+
+  return early_mask * crouch_reward
+
+
 def smooth_actions(env):
   action = env.action_manager.action
   return torch.sum(torch.square(action), dim=1)

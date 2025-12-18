@@ -48,9 +48,9 @@ class BackflipPhaseCommand(CommandTerm):
 
   def _update_command(self):
     quat = self.robot.data.root_link_quat_w
-    siny_cosp = 2.0 * (quat[:, 0] * quat[:, 2] + quat[:, 3] * quat[:, 1])
-    cosy_cosp = 1.0 - 2.0 * (quat[:, 1] ** 2 + quat[:, 2] ** 2)
-    current_pitch = torch.atan2(siny_cosp, cosy_cosp)
+    sinp = 2.0 * (quat[:, 0] * quat[:, 2] - quat[:, 3] * quat[:, 1])
+    sinp = torch.clamp(sinp, -1.0, 1.0)
+    current_pitch = torch.asin(sinp)
 
     pitch_delta = current_pitch - self.prev_pitch
     pitch_delta = torch.where(pitch_delta > math.pi, pitch_delta - 2 * math.pi, pitch_delta)
