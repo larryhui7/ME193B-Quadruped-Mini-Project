@@ -4,26 +4,37 @@ from mjlab.asset_zoo.robots.unitree_go1.go1_constants import (
   GO1_ACTION_SCALE,
   get_go1_robot_cfg,
 )
-from mjlab.sensor import ContactSensorCfg
+from mjlab.sensor import ContactMatch, ContactSensorCfg
 from mjlab.tasks.backflip.backflip_env_cfg import create_backflip_env_cfg
 
-# Contact sensor for feet
+# Foot geometry names for Go1
+GO1_FOOT_NAMES = ("FR", "FL", "RR", "RL")
+GO1_FOOT_GEOMS = tuple(f"{name}_foot_collision" for name in GO1_FOOT_NAMES)
+
+# Contact sensor for feet-ground contact
 GO1_FEET_SENSOR_CFG = ContactSensorCfg(
-  name="feet_contact",
-  prim_path="robot",
+  name="feet_ground_contact",
+  primary=ContactMatch(mode="geom", pattern=GO1_FOOT_GEOMS, entity="robot"),
+  secondary=ContactMatch(mode="body", pattern="terrain"),
+  fields=("found", "force"),
+  reduce="netforce",
+  num_slots=1,
   track_air_time=True,
-  body_names=(".*foot",),
 )
 
-# Self-collision sensor (body contact detection)
+# Self-collision sensor (non-foot body contact with ground)
 GO1_SELF_COLLISION_SENSOR_CFG = ContactSensorCfg(
-  name="self_collision",
-  prim_path="robot",
-  body_names=(
-    ".*thigh",
-    ".*calf",
-    "trunk",
+  name="nonfoot_ground_touch",
+  primary=ContactMatch(
+    mode="geom",
+    entity="robot",
+    pattern=r".*_collision\d*$",
+    exclude=GO1_FOOT_GEOMS,
   ),
+  secondary=ContactMatch(mode="body", pattern="terrain"),
+  fields=("found",),
+  reduce="none",
+  num_slots=1,
 )
 
 UNITREE_GO1_BACKFLIP_ENV_CFG = create_backflip_env_cfg(

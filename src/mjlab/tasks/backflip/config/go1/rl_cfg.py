@@ -3,16 +3,12 @@
 from mjlab.rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
 
 UNITREE_GO1_BACKFLIP_RL_CFG = RslRlOnPolicyRunnerCfg(
-  num_steps_per_env=24,
-  max_iterations=5000,
-  save_interval=500,
-  experiment_name="backflip_go1",
-  empirical_normalization=False,
   policy=RslRlPpoActorCriticCfg(
-    class_name="ActorCritic",
     init_noise_std=1.0,
-    actor_hidden_dims=[256, 256, 128],
-    critic_hidden_dims=[256, 256, 128],
+    actor_obs_normalization=False,
+    critic_obs_normalization=False,
+    actor_hidden_dims=(256, 256, 128),
+    critic_hidden_dims=(256, 256, 128),
     activation="elu",
   ),
   algorithm=RslRlPpoAlgorithmCfg(
@@ -29,6 +25,8 @@ UNITREE_GO1_BACKFLIP_RL_CFG = RslRlOnPolicyRunnerCfg(
     desired_kl=0.01,
     max_grad_norm=1.0,
   ),
-  clip_actions=1.0,
+  experiment_name="backflip_go1",
+  save_interval=50,
+  num_steps_per_env=24,
+  max_iterations=1000,
 )
-

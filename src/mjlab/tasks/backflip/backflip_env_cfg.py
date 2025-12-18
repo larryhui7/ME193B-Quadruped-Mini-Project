@@ -19,12 +19,14 @@ from mjlab.sensor import ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.tasks.backflip import mdp
 from mjlab.tasks.backflip.mdp import BackflipPhaseCommandCfg
+from mjlab.terrains import TerrainImporterCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
 from mjlab.viewer import ViewerConfig
 
-# Scene configuration for backflip (flat ground, no terrain)
 SCENE_CFG = SceneCfg(
-    terrain=None,
+    terrain=TerrainImporterCfg(
+        terrain_type="plane",
+    ),
     num_envs=1,
     extent=2.0,
 )
@@ -50,30 +52,15 @@ SIM_CFG = SimulationCfg(
 
 
 def create_backflip_env_cfg(
-    robot_cfg: EntityCfg,
-    action_scale: float | dict[str, float],
-    viewer_body_name: str,
-    feet_sensor_cfg: ContactSensorCfg,
-    self_collision_sensor_cfg: ContactSensorCfg,
-    standing_height: float = 0.35,
-    peak_height: float = 0.7,
-    flip_duration: float = 0.8,
-) -> ManagerBasedRlEnvCfg:
-    """Create a backflip task configuration.
-
-    Args:
-      robot_cfg: Robot configuration.
-      action_scale: Action scaling factor(s).
-      viewer_body_name: Body for camera tracking.
-      feet_sensor_cfg: Contact sensor config for feet-ground contact.
-      self_collision_sensor_cfg: Contact sensor for body collision detection.
-      standing_height: Robot standing height (m).
-      peak_height: Target peak height during flip (m).
-      flip_duration: Duration of the backflip (s).
-
-    Returns:
-      Complete ManagerBasedRlEnvCfg for backflip task.
-    """
+    robot_cfg,
+    action_scale,
+    viewer_body_name,
+    feet_sensor_cfg,
+    self_collision_sensor_cfg,
+    standing_height=0.35,
+    peak_height=0.7,
+    flip_duration=0.8,
+):
     scene = deepcopy(SCENE_CFG)
 
     scene.entities = {"robot": robot_cfg}
@@ -83,15 +70,13 @@ def create_backflip_env_cfg(
         self_collision_sensor_cfg,
     )
 
-    # Enable curriculum mode for terrain generator.
     if scene.terrain is not None and scene.terrain.terrain_generator is not None:
         scene.terrain.terrain_generator.curriculum = True
 
     viewer = deepcopy(VIEWER_CONFIG)
     viewer.body_name = viewer_body_name
 
-    # Actions: joint position control
-    actions: dict[str, ActionTermCfg] = {
+    actions = {
         "joint_pos": JointPositionActionCfg(
             asset_name="robot",
             actuator_names=(".*",),
@@ -100,11 +85,9 @@ def create_backflip_env_cfg(
         )
     }
 
-    # Commands: phase-based backflip trajectory
-    commands: dict[str, CommandTermCfg] = {
+    commands = {
         "backflip": BackflipPhaseCommandCfg(
             asset_name="robot",
-            # No resampling during episode
             resampling_time_range=(100.0, 100.0),
             flip_duration=flip_duration,
             standing_height=standing_height,
@@ -112,11 +95,7 @@ def create_backflip_env_cfg(
         )
     }
 
-    # ---------------------------------------------------------------------------
-    # Observations
-    # ---------------------------------------------------------------------------
-    policy_terms: dict[str, ObservationTermCfg] = {
-        # Phase and target information
+    policy_terms = {
         "backflip_phase": ObservationTermCfg(
             func=mdp.backflip_phase,
             params={"command_name": "backflip"},
@@ -129,7 +108,6 @@ def create_backflip_env_cfg(
             func=mdp.backflip_target_pitch_vel,
             params={"command_name": "backflip"},
         ),
-        # Current state
         "base_height": ObservationTermCfg(
             func=mdp.base_height,
             noise=Unoise(n_min=-0.02, n_max=0.02),
@@ -161,7 +139,6 @@ def create_backflip_env_cfg(
 
     critic_terms = {
         **policy_terms,
-        # Critic gets clean target pitch for better value estimation
         "target_pitch": ObservationTermCfg(
             func=mdp.backflip_target_pitch,
             params={"command_name": "backflip"},
@@ -184,11 +161,7 @@ def create_backflip_env_cfg(
         ),
     }
 
-    # ---------------------------------------------------------------------------
-    # Events
-    # ---------------------------------------------------------------------------
     events = {
-        # Reset to standing pose
         "reset_base": EventTermCfg(
             func=mdp.reset_root_state_uniform,
             mode="reset",
@@ -208,11 +181,7 @@ def create_backflip_env_cfg(
         ),
     }
 
-    # ---------------------------------------------------------------------------
-    # Rewards
-    # ---------------------------------------------------------------------------
     rewards = {
-        # Primary tracking rewards
         "track_height": RewardTermCfg(
             func=mdp.track_height,
             weight=2.0,
@@ -231,19 +200,11 @@ def create_backflip_env_cfg(
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
-        # Phase progress
         "phase_progress": RewardTermCfg(
             func=mdp.phase_progress,
-            weight=1.0,
+            weight=10.0, #beeg progress woooo
             params={"command_name": "backflip"},
         ),
-        # Completion bonus
-        "completion_bonus": RewardTermCfg(
-            func=mdp.backflip_completion_bonus,
-            weight=1.0,
-            params={"command_name": "backflip", "bonus": 20.0},
-        ),
-        # Landing orientation
         "upright_at_landing": RewardTermCfg(
             func=mdp.upright_at_landing,
             weight=2.0,
@@ -253,77 +214,41 @@ def create_backflip_env_cfg(
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
-        # Takeoff reward
-        "takeoff_impulse": RewardTermCfg(
-            func=mdp.takeoff_impulse,
-            weight=1.5,
-            params={
-                "command_name": "backflip",
-                "asset_cfg": SceneEntityCfg("robot"),
-            },
-        ),
-        # Rotation consistency
-        "rotation_consistency": RewardTermCfg(
-            func=mdp.rotation_consistency,
-            weight=1.0,
-            params={"asset_cfg": SceneEntityCfg("robot")},
-        ),
-        # Regularization
         "action_rate": RewardTermCfg(
             func=mdp.action_rate_penalty,
             weight=-0.01,
         ),
-        "joint_velocity": RewardTermCfg(
-            func=mdp.joint_velocity_penalty,
-            weight=-0.0001,
+        "off_axis": RewardTermCfg(
+            func=mdp.off_axis_penalty,
+            weight=-0.5,
+            params={"asset_cfg": SceneEntityCfg("robot")},
+        ),
+        "takeoff_impulse": RewardTermCfg(
+            func=mdp.takeoff_impulse,
+            weight=10.0, #beeg jump
+            params={
+                "command_name": "backflip",
+                "asset_cfg": SceneEntityCfg("robot"),
+            },
+        ),
+        "rotation_consistency": RewardTermCfg(
+            func=mdp.rotation_consistency,
+            weight=2.0,
             params={"asset_cfg": SceneEntityCfg("robot")},
         ),
     }
 
-    # ---------------------------------------------------------------------------
-    # Terminations
-    # ---------------------------------------------------------------------------
     terminations = {
-        # Success
-        "backflip_completed": TerminationTermCfg(
-            func=mdp.backflip_completed,
-            time_out=True,  # Treat as success (not failure)
-            params={
-                "command_name": "backflip",
-                "uprightness_threshold": 0.4,
-                "asset_cfg": SceneEntityCfg("robot"),
-            },
-        ),
-        # Timeout
         "time_out": TerminationTermCfg(
             func=mdp.time_out,
             time_out=True,
         ),
-        # Failures
         "height_too_low": TerminationTermCfg(
             func=mdp.height_too_low,
             time_out=False,
             params={
                 "command_name": "backflip",
-                "min_height": 0.12,
-                "asset_cfg": SceneEntityCfg("robot"),
-            },
-        ),
-        "bad_landing": TerminationTermCfg(
-            func=mdp.bad_landing_orientation,
-            time_out=False,
-            params={
-                "command_name": "backflip",
-                "limit_angle": 1.3,
-                "asset_cfg": SceneEntityCfg("robot"),
-            },
-        ),
-        "excessive_rotation": TerminationTermCfg(
-            func=mdp.excessive_rotation,
-            time_out=False,
-            params={
-                "max_roll": 1.2,
-                "max_yaw_rate": 6.0,
+                "min_height": 0.1,
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
@@ -339,6 +264,6 @@ def create_backflip_env_cfg(
         events=events,
         sim=SIM_CFG,
         viewer=viewer,
-        decimation=2,  # Lower decimation for faster control during dynamic motion
-        episode_length_s=3.0,  # Short episodes for the flip
+        decimation=2,
+        episode_length_s=3.0,
     )
