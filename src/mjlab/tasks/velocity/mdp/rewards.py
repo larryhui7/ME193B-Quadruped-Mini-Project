@@ -70,74 +70,74 @@ def default_joint_position(
   return torch.sum(torch.abs(current_joint_pos - desired_joint_pos), dim=1)
 
 
-def flat_orientation(
-    env: ManagerBasedRlEnv,
-    std: float,
-    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
-) -> torch.Tensor:
-    """Reward flat base orientation (robot being upright).
-
-    If asset_cfg.body_ids is provided, computes the projected gravity
-    for those bodies and averages the uprightness penalty.
-    Otherwise, uses the root link projected gravity.
-    """
-    asset: Entity = env.scene[asset_cfg.name]
-
-    # Root link (preferred and fastest path)
-    if not asset_cfg.body_ids:
-        projected_gravity_b = asset.data.projected_gravity_b  # [B, 3]
-        xy_squared = torch.sum(projected_gravity_b[:, :2] ** 2, dim=1)
-        return torch.exp(-xy_squared / std**2)
-
-    # ------------------------------------------------------------------
-    # Body-specific orientation reward
-    # ------------------------------------------------------------------
-
-    # body quaternions: [B, N, 4]
-    body_quat_w = asset.data.body_link_quat_w[:, asset_cfg.body_ids, :]
-
-    # gravity vector: usually [B, 3] in IsaacLab
-    gravity_w = asset.data.gravity_vec_w
-    if gravity_w.ndim == 1:
-        gravity_w = gravity_w.unsqueeze(0).expand(body_quat_w.shape[0], -1)
-
-    # expand gravity to [B, N, 3]
-    gravity_w = gravity_w.unsqueeze(1).expand(-1, body_quat_w.shape[1], -1)
-
-    # apply inverse quaternion rotation (flattened)
-    projected_gravity_b = quat_apply_inverse(
-        body_quat_w.reshape(-1, 4),      # [B*N, 4]
-        gravity_w.reshape(-1, 3),        # [B*N, 3]
-    ).reshape(body_quat_w.shape[0], body_quat_w.shape[1], 3)  # [B, N, 3]
-
-    # uprightness penalty (average over selected bodies)
-    xy_squared = torch.sum(projected_gravity_b[..., :2] ** 2, dim=-1).mean(dim=1)
-
-    return torch.exp(-xy_squared / std**2)
-    
 # def flat_orientation(
-#   env: ManagerBasedRlEnv,
-#   std: float,
-#   asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+#     env: ManagerBasedRlEnv,
+#     std: float,
+#     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 # ) -> torch.Tensor:
-#   """Reward flat base orientation (robot being upright).
+#     """Reward flat base orientation (robot being upright).
 
-#   If asset_cfg has body_ids specified, computes the projected gravity
-#   for that specific body. Otherwise, uses the root link projected gravity.
-#   """
-#   asset: Entity = env.scene[asset_cfg.name]
+#     If asset_cfg.body_ids is provided, computes the projected gravity
+#     for those bodies and averages the uprightness penalty.
+#     Otherwise, uses the root link projected gravity.
+#     """
+#     asset: Entity = env.scene[asset_cfg.name]
 
-  # If body_ids are specified, compute projected gravity for that body.
-  # if asset_cfg.body_ids:
-  #   body_quat_w = asset.data.body_link_quat_w[:, asset_cfg.body_ids, :]  # [B, N, 4]
-  #   body_quat_w = body_quat_w.squeeze(1)  # [B, 4]
-  #   gravity_w = asset.data.gravity_vec_w  # [3]
-  #   projected_gravity_b = quat_apply_inverse(body_quat_w, gravity_w)  # [B, 3]
-  #   xy_squared = torch.sum(torch.square(projected_gravity_b[:, :2]), dim=1)
-  # else:
-  #   # Use root link projected gravity.
-  #   xy_squared = torch.sum(torch.square(asset.data.projected_gravity_b[:, :2]), dim=1)
-  # return torch.exp(-xy_squared / std**2)
+#     # Root link (preferred and fastest path)
+#     if not asset_cfg.body_ids:
+#         projected_gravity_b = asset.data.projected_gravity_b  # [B, 3]
+#         xy_squared = torch.sum(projected_gravity_b[:, :2] ** 2, dim=1)
+#         return torch.exp(-xy_squared / std**2)
+
+#     # ------------------------------------------------------------------
+#     # Body-specific orientation reward
+#     # ------------------------------------------------------------------
+
+#     # body quaternions: [B, N, 4]
+#     body_quat_w = asset.data.body_link_quat_w[:, asset_cfg.body_ids, :]
+
+#     # gravity vector: usually [B, 3] in IsaacLab
+#     gravity_w = asset.data.gravity_vec_w
+#     if gravity_w.ndim == 1:
+#         gravity_w = gravity_w.unsqueeze(0).expand(body_quat_w.shape[0], -1)
+
+#     # expand gravity to [B, N, 3]
+#     gravity_w = gravity_w.unsqueeze(1).expand(-1, body_quat_w.shape[1], -1)
+
+#     # apply inverse quaternion rotation (flattened)
+#     projected_gravity_b = quat_apply_inverse(
+#         body_quat_w.reshape(-1, 4),      # [B*N, 4]
+#         gravity_w.reshape(-1, 3),        # [B*N, 3]
+#     ).reshape(body_quat_w.shape[0], body_quat_w.shape[1], 3)  # [B, N, 3]
+
+#     # uprightness penalty (average over selected bodies)
+#     xy_squared = torch.sum(projected_gravity_b[..., :2] ** 2, dim=-1).mean(dim=1)
+
+#     return torch.exp(-xy_squared / std**2)
+    
+def flat_orientation(
+  env: ManagerBasedRlEnv,
+  std: float,
+  asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+  """Reward flat base orientation (robot being upright).
+
+  If asset_cfg has body_ids specified, computes the projected gravity
+  for that specific body. Otherwise, uses the root link projected gravity.
+  """
+  asset: Entity = env.scene[asset_cfg.name]
+
+  If body_ids are specified, compute projected gravity for that body.
+  if asset_cfg.body_ids:
+    body_quat_w = asset.data.body_link_quat_w[:, asset_cfg.body_ids, :]  # [B, N, 4]
+    body_quat_w = body_quat_w.squeeze(1)  # [B, 4]
+    gravity_w = asset.data.gravity_vec_w  # [3]
+    projected_gravity_b = quat_apply_inverse(body_quat_w, gravity_w)  # [B, 3]
+    xy_squared = torch.sum(torch.square(projected_gravity_b[:, :2]), dim=1)
+  else:
+    # Use root link projected gravity.
+    xy_squared = torch.sum(torch.square(asset.data.projected_gravity_b[:, :2]), dim=1)
+  return torch.exp(-xy_squared / std**2)
 
 
 
