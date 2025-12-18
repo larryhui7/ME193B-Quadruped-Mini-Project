@@ -264,12 +264,12 @@ def create_velocity_env_cfg(
     "track_linear_velocity": RewardTermCfg(
       func=mdp.track_linear_velocity,
       weight=2.0,
-      params={"std": math.sqrt(0.25), "command_name": "twist"},
+      params={"std": math.sqrt(0.25), "command_name": "twist", "asset_cfg": SceneEntityCfg("robot")},
     ),
     "track_angular_velocity": RewardTermCfg(
       func=mdp.track_angular_velocity,
       weight=2.0,
-      params={"std": math.sqrt(0.25), "command_name": "twist"},
+      params={"std": math.sqrt(0.25), "command_name": "twist", "asset_cfg": SceneEntityCfg("robot")},
     ),
 
     # -------------------------------------------------------------------------
@@ -284,12 +284,12 @@ def create_velocity_env_cfg(
     "upright": RewardTermCfg(
       func=mdp.flat_orientation,
       weight=1.0,
-      params={"std": math.sqrt(0.2)},
+      params={"std": math.sqrt(0.2), "asset_cfg": SceneEntityCfg("robot", body_ids=[])},
     ),
     "default_joint_pos": RewardTermCfg(
       func=mdp.default_joint_position,
       weight=-0.1,
-      params={},
+      params={"asset_cfg": SceneEntityCfg("robot")},
     ),
     # To prevent reaching physical limits and encourage smooth actions, consider adding terms such as:
     # 3. penalizing norm of action rate
@@ -301,6 +301,7 @@ def create_velocity_env_cfg(
     "dof_pos_limits": RewardTermCfg(
       func=mdp.joint_pos_limits,
       weight=-1.0,
+      params={"asset_cfg": SceneEntityCfg("robot")},
     ),
     # -------------------------------------------------------------------------
     # Part3 (a) Writing gait terms
