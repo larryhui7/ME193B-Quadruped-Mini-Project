@@ -6,7 +6,6 @@ from mjlab.asset_zoo.robots.unitree_go1.go1_constants import (
 )
 from mjlab.sensor import ContactSensorCfg
 from mjlab.tasks.backflip.backflip_env_cfg import create_backflip_env_cfg
-from mjlab.tasks.registry import register_env
 
 # Contact sensor for feet
 GO1_FEET_SENSOR_CFG = ContactSensorCfg(
@@ -37,9 +36,4 @@ UNITREE_GO1_BACKFLIP_ENV_CFG = create_backflip_env_cfg(
   peak_height=0.6,       # Target peak height during flip
   flip_duration=0.7,     # Duration of the backflip
 )
-
-
-@register_env(name="backflip-go1")
-def get_env_cfg():
-  return UNITREE_GO1_BACKFLIP_ENV_CFG
 

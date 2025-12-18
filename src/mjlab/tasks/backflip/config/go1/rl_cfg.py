@@ -1,7 +1,6 @@
 """RL configuration for Go1 backflip task."""
 
 from mjlab.rl import RslRlOnPolicyRunnerCfg, RslRlPpoActorCriticCfg, RslRlPpoAlgorithmCfg
-from mjlab.tasks.registry import register_rl
 
 UNITREE_GO1_BACKFLIP_RL_CFG = RslRlOnPolicyRunnerCfg(
   num_steps_per_env=24,
@@ -32,9 +31,4 @@ UNITREE_GO1_BACKFLIP_RL_CFG = RslRlOnPolicyRunnerCfg(
   ),
   clip_actions=1.0,
 )
-
-
-@register_rl(name="backflip-go1")
-def get_rl_cfg():
-  return UNITREE_GO1_BACKFLIP_RL_CFG
 
