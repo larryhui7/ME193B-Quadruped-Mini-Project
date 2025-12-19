@@ -67,7 +67,7 @@ SIM_CFG = SimulationCfg(
 
 scene = deepcopy(SCENE_CFG)
 scene.entities = {"robot": get_go2_robot_cfg()}
-scene.sensors = {"feet_contact": FEET_SENSOR_CFG}
+scene.sensors = (FEET_SENSOR_CFG,)
 
 actions = {
   "joint_pos": JointPositionActionCfg(

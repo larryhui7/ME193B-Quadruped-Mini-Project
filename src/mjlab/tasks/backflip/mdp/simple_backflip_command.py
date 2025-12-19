@@ -77,40 +77,47 @@ class SimpleBackflipCommand(CommandTerm):
       # Fallback: estimate from height
       is_airborne = current_height > standing + 0.15
 
-    # Phase 0.1->0.25: Takeoff (height toward peak, must become airborne)
+    # Phase 0.1->0.25: Takeoff (height toward peak)
+    # Progress based on height, but must be airborne to complete (reach 0.25)
     crouch_done = new_progress >= 0.1
     takeoff_target = standing + 0.5 * (self.cfg.peak_height - standing)
     in_takeoff_phase = crouch_done & (current_progress < 0.25)
     takeoff_frac = torch.clamp((current_height - crouch) / (takeoff_target - crouch), 0.0, 1.0)
-    takeoff_progress = 0.1 + 0.15 * takeoff_frac
-    new_progress = torch.where(in_takeoff_phase, torch.maximum(new_progress, takeoff_progress), new_progress)
+    # Can get up to 0.24 from height alone, need airborne to hit 0.25
+    takeoff_progress_from_height = 0.1 + 0.14 * takeoff_frac
+    takeoff_progress_airborne = torch.where(is_airborne, torch.tensor(0.25, device=self.device), takeoff_progress_from_height)
+    new_progress = torch.where(in_takeoff_phase, torch.maximum(new_progress, takeoff_progress_airborne), new_progress)
 
-    # Phase 0.25->0.5: Rotating to inverted (rotation 0 -> 0.5 = 0° -> 180°, must be airborne)
+    # Phase 0.25->0.5: Rotating to inverted (rotation 0 -> 0.5 = 0° -> 180°)
+    # Must be airborne AND above minimum height to get rotation credit
     takeoff_done = new_progress >= 0.25
     in_rotation_phase = takeoff_done & (current_progress < 0.5)
-    # rotation_frac 0->0.5 maps to phase 0.25->0.5
+    min_rotation_height = standing + 0.3 * (self.cfg.peak_height - standing)
+    high_enough = current_height > min_rotation_height
+    # Progress based on rotation angle
     rotation_to_inverted = torch.clamp(rotation_frac / 0.5, 0.0, 1.0)
-    height_toward_peak = torch.clamp((current_height - takeoff_target) / (self.cfg.peak_height - takeoff_target), 0.0, 1.0)
-    # Combine height and rotation progress
-    rotation_combined = 0.3 * height_toward_peak + 0.7 * rotation_to_inverted
-    rotation_progress = 0.25 + 0.25 * rotation_combined
-    # Only count if actually airborne
-    new_progress = torch.where(in_rotation_phase & is_airborne, torch.maximum(new_progress, rotation_progress), new_progress)
+    rotation_progress = 0.25 + 0.25 * rotation_to_inverted
+    # Only count if airborne AND high enough
+    new_progress = torch.where(in_rotation_phase & is_airborne & high_enough, torch.maximum(new_progress, rotation_progress), new_progress)
 
-    # Phase 0.5->0.75: Past inverted (rotation 0.5 -> 0.75 = 180° -> 270°, must be airborne)
+    # Phase 0.5->0.75: Complete flip (rotation 0.5 -> 1.0 = 180° -> 360°, must be airborne)
     at_inverted = new_progress >= 0.5
-    in_descent_phase = at_inverted & (current_progress < 0.75)
-    descent_frac = torch.clamp((rotation_frac - 0.5) / 0.25, 0.0, 1.0)
-    descent_progress = 0.5 + 0.25 * descent_frac
+    in_flip_phase = at_inverted & (current_progress < 0.75)
+    # rotation_frac 0.5->1.0 maps to phase 0.5->0.75
+    flip_frac = torch.clamp((rotation_frac - 0.5) / 0.5, 0.0, 1.0)
+    flip_progress = 0.5 + 0.25 * flip_frac
     # Must be airborne
-    new_progress = torch.where(in_descent_phase & is_airborne, torch.maximum(new_progress, descent_progress), new_progress)
+    new_progress = torch.where(in_flip_phase & is_airborne, torch.maximum(new_progress, flip_progress), new_progress)
 
-    # Phase 0.75->1.0: Landing (rotation 0.75 -> 1.0 = 270° -> 360°)
-    past_descent = new_progress >= 0.75
-    in_landing_phase = past_descent & (current_progress < 1.0)
-    landing_frac = torch.clamp((rotation_frac - 0.75) / 0.25, 0.0, 1.0)
-    landing_progress = 0.75 + 0.25 * landing_frac
-    new_progress = torch.where(in_landing_phase, torch.maximum(new_progress, landing_progress), new_progress)
+    # Phase 0.75->1.0: Landing (on ground, upright)
+    flip_done = new_progress >= 0.75
+    in_landing_phase = flip_done & (current_progress < 1.0)
+    # Landing progress: upright (grav_z close to -1) and on ground
+    upright_frac = torch.clamp((-grav_z - 0.5) / 0.5, 0.0, 1.0)  # grav_z: -1=upright, 1=inverted
+    on_ground = ~is_airborne
+    landing_progress = 0.75 + 0.25 * upright_frac
+    # Only count if back on ground
+    new_progress = torch.where(in_landing_phase & on_ground, torch.maximum(new_progress, landing_progress), new_progress)
 
     self.metrics["max_rotation_progress"] = new_progress
 
