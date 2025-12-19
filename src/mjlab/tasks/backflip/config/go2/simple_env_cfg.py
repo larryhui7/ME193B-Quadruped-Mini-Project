@@ -1,4 +1,11 @@
-"""Simplified Go2 backflip environment - minimal rewards following PDF guidance."""
+"""Simplified Go2 backflip environment - minimal rewards following PDF guidance.
+
+Key design choices (from PDF Section 3b):
+1. Command outputs simple reference quantities (height + orientation)
+2. Coarse, hand-crafted trajectory shapes are sufficient
+3. Small number of straightforward reward terms
+4. Phase variable parameterizes progress through the flip
+"""
 
 from copy import deepcopy
 
@@ -68,19 +75,22 @@ actions = {
   )
 }
 
-# Simple time-based command
+# Simple time-based command with crouch-then-jump trajectory
 commands = {
   "backflip": SimpleBackflipCommandCfg(
     asset_name="robot",
     resampling_time_range=(100.0, 100.0),  # Never resample
-    flip_duration=0.8,  # 0.8 second flip
+    flip_duration=1.0,  # 1 second total (including crouch)
     standing_height=0.35,
-    peak_height=0.6,
+    crouch_height=0.18,  # Deeper crouch for more explosive power
+    peak_height=0.90,  # Higher peak = more air time (~0.72s, needs ~8.7 rad/s)
   )
 }
 
-# Minimal observations
+# Observations following PDF Section 1f guidance
+# Policy sees: command info + proprioception (with noise)
 policy_terms = {
+  # Command information (what to track)
   "phase": ObservationTermCfg(
     func=mdp.backflip_phase,
     params={"command_name": "backflip"},
@@ -89,10 +99,15 @@ policy_terms = {
     func=mdp.backflip_target_height,
     params={"command_name": "backflip"},
   ),
-  "target_pitch": ObservationTermCfg(
-    func=mdp.backflip_target_pitch,
+  "target_grav_x": ObservationTermCfg(
+    func=mdp.backflip_target_grav_x,
     params={"command_name": "backflip"},
   ),
+  "target_grav_z": ObservationTermCfg(
+    func=mdp.backflip_target_grav_z,
+    params={"command_name": "backflip"},
+  ),
+  # Proprioception (with noise for robustness)
   "base_height": ObservationTermCfg(
     func=mdp.base_height,
     noise=Unoise(n_min=-0.02, n_max=0.02),
@@ -122,13 +137,20 @@ policy_terms = {
   ),
 }
 
-# Critic gets clean observations
+# Critic gets clean observations (asymmetric critic training)
 critic_terms = {
   **policy_terms,
   "base_orientation_quat": ObservationTermCfg(
     func=mdp.base_orientation_quat,
   ),
 }
+# Remove noise from critic observations
+for key in critic_terms:
+  if hasattr(critic_terms[key], 'noise'):
+    critic_terms[key] = ObservationTermCfg(
+      func=critic_terms[key].func,
+      params=critic_terms[key].params if hasattr(critic_terms[key], 'params') else {},
+    )
 
 observations = {
   "policy": ObservationGroupCfg(
@@ -164,35 +186,42 @@ events = {
   ),
 }
 
-# MINIMAL REWARDS - just 3 terms as PDF suggests
+# MINIMAL REWARDS - following PDF "small number of straightforward reward terms"
 rewards = {
-  # Main tracking rewards (Gaussian)
+  # Track height trajectory (Gaussian)
   "track_height": RewardTermCfg(
     func=simple_rewards.track_height_simple,
     weight=2.0,
     params={
       "command_name": "backflip",
-      "std": 0.15,
+      "std": 0.1,
       "asset_cfg": SceneEntityCfg("robot"),
     },
   ),
-  "track_pitch": RewardTermCfg(
-    func=simple_rewards.track_pitch_simple,
-    weight=2.0,
+  # Track orientation via projected gravity (Gaussian)
+  "track_orientation": RewardTermCfg(
+    func=simple_rewards.track_orientation_simple,
+    weight=3.0,  # Slightly higher to encourage rotation
     params={
       "command_name": "backflip",
-      "std": 0.5,
+      "std": 0.3,
       "asset_cfg": SceneEntityCfg("robot"),
     },
   ),
-  # Basic regularization
+  # Penalize off-axis rotation (we want pure pitch, not roll/yaw)
+  "off_axis": RewardTermCfg(
+    func=simple_rewards.off_axis_simple,
+    weight=-1.0,
+    params={"asset_cfg": SceneEntityCfg("robot")},
+  ),
+  # Small action smoothness penalty
   "action_rate": RewardTermCfg(
     func=simple_rewards.action_rate_simple,
     weight=-0.01,
   ),
 }
 
-# Simple termination
+# Simple termination - just timeout
 terminations = {
   "time_out": TerminationTermCfg(
     func=mdp.time_out,
@@ -212,5 +241,5 @@ SIMPLE_GO2_BACKFLIP_ENV_CFG = ManagerBasedRlEnvCfg(
   sim=SIM_CFG,
   viewer=VIEWER_CONFIG,
   decimation=2,
-  episode_length_s=1.5,  # Short episodes - just enough for one flip attempt
+  episode_length_s=1.5,  # 1.5s episodes (1s flip + buffer)
 )

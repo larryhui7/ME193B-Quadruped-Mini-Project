@@ -32,6 +32,18 @@ def backflip_target_x(env, command_name):
   return command[:, 5:6]
 
 
+def backflip_target_grav_x(env, command_name):
+  """Target gravity x-component (for simple backflip command)."""
+  command = env.command_manager.get_command(command_name)
+  return command[:, 2:3]
+
+
+def backflip_target_grav_z(env, command_name):
+  """Target gravity z-component (for simple backflip command)."""
+  command = env.command_manager.get_command(command_name)
+  return command[:, 3:4]
+
+
 def base_height(env, asset_cfg=_DEFAULT_ASSET_CFG):
   asset = env.scene[asset_cfg.name]
   return asset.data.root_link_pos_w[:, 2:3]
