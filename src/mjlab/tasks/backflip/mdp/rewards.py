@@ -78,7 +78,8 @@ def rotation_consistency(env, command_name=None, asset_cfg=_DEFAULT_ASSET_CFG):
   """Reward maintaining backward pitch velocity during flip phase."""
   asset = env.scene[asset_cfg.name]
   pitch_vel = asset.data.root_link_ang_vel_b[:, 1]
-  rotation_reward = torch.clamp(-pitch_vel / 10.0, 0.0, 1.0)
+  # Need ~6 rad/s to complete flip in 1 second
+  rotation_reward = torch.clamp(-pitch_vel / 6.0, 0.0, 1.0)
 
   # If command_name provided, only apply during flip phase
   if command_name is not None:
@@ -108,12 +109,15 @@ def air_time_during_flip(env, command_name, sensor_name):
   command = env.command_manager.get_command(command_name)
 
   phase = command[:, 0]
+  cumulative_rotation = command[:, 4]  # Track actual rotation progress
   in_contact = torch.any(sensor.data.found > 0, dim=1)
 
+  # Only reward if actually rotating (at least 0.5 rad of rotation)
+  has_rotation = (cumulative_rotation < -0.5).float()
   mid_flip_mask = ((phase > 0.2) & (phase < 0.8)).float()
   airborne = (~in_contact).float()
 
-  return mid_flip_mask * airborne
+  return mid_flip_mask * airborne * has_rotation
 
 
 def foot_height_during_flip(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
@@ -156,20 +160,25 @@ def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   pitch_vel = asset.data.root_link_ang_vel_b[:, 1]  # negative = backward rotation
   backward_vel = -asset.data.root_link_lin_vel_w[:, 0]  # negative x = backward
 
-  # Active after crouch (phi > 0.1) through early flip (phi < 0.5) - extended window
+  # Active after crouch (phi > 0.1) through early flip (phi < 0.5)
   takeoff_mask = ((phase >= 0.1) & (phase < 0.5)).float()
 
-  # Reward upward velocity - need at least 1.5 m/s for a good flip
-  upward_reward = torch.clamp(vertical_vel / 1.5, 0.0, 1.0)
+  # Reward upward velocity - need 2+ m/s for enough air time
+  upward_reward = torch.clamp(vertical_vel / 2.0, 0.0, 1.0)
 
-  # Reward backward pitch velocity - need strong rotation (at least 3 rad/s)
-  rotation_reward = torch.clamp(-pitch_vel / 3.0, 0.0, 1.0)
+  # Reward backward pitch velocity - need 6+ rad/s to get past vertical
+  # (2π rad / 1s flip = 6.28 rad/s needed on average)
+  rotation_reward = torch.clamp(-pitch_vel / 6.0, 0.0, 1.0)
 
-  # Reward backward linear velocity (moving backwards)
+  # Reward backward linear velocity
   backward_reward = torch.clamp(backward_vel / 1.0, 0.0, 1.0)
 
-  # Multiplicative: need upward + rotation, with bonus for backward movement
-  return takeoff_mask * upward_reward * rotation_reward * (0.5 + 0.5 * backward_reward)
+  # Additive structure: reward each component, with bonus for combination
+  base_reward = 0.3 * upward_reward + 0.5 * rotation_reward + 0.2 * backward_reward
+  # Bonus for having both upward AND rotation together
+  combo_bonus = upward_reward * rotation_reward
+
+  return takeoff_mask * (base_reward + combo_bonus)
 
 
 def crouch_incentive(env, standing_height=0.35, crouch_depth=0.25, crouch_steps=30, asset_cfg=_DEFAULT_ASSET_CFG):
@@ -201,7 +210,8 @@ def off_axis_penalty(env, asset_cfg=_DEFAULT_ASSET_CFG):
   proj_grav = asset.data.projected_gravity_b
   roll_error = torch.abs(proj_grav[:, 1])
   yaw_rate = torch.abs(asset.data.root_link_ang_vel_b[:, 2])
-  return roll_error + 0.1 * yaw_rate
+  # Strong penalty on both roll and yaw - we only want pitch rotation
+  return roll_error + 1.0 * yaw_rate
 
 
 def joint_velocity_penalty(env, asset_cfg=_DEFAULT_ASSET_CFG):

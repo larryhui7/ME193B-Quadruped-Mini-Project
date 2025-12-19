@@ -259,7 +259,7 @@ def create_backflip_env_cfg(
             weight=-8.0,  # Penalize slow rotation during mid-flip
             params={
                 "command_name": "backflip",
-                "min_pitch_vel": 2.0,  # Minimum pitch velocity threshold (rad/s)
+                "min_pitch_vel": 4.0,  # Need at least 4 rad/s to get past vertical
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
@@ -276,7 +276,7 @@ def create_backflip_env_cfg(
             weight=8.0,  # Increased to encourage deeper crouch
             params={
                 "standing_height": standing_height,
-                "crouch_depth": 0.25,  # Match command generator crouch depth
+                "crouch_depth": 0.10,  # Match command generator crouch depth
                 "crouch_steps": 80,  # More time to reach deep crouch
                 "asset_cfg": SceneEntityCfg("robot"),
             },
@@ -295,14 +295,6 @@ def create_backflip_env_cfg(
             params={
                 "command_name": "backflip",
                 "asset_cfg": SceneEntityCfg("robot"),
-            },
-        ),
-        "foot_height_during_flip": RewardTermCfg(
-            func=mdp.foot_height_during_flip,
-            weight=5.0,  # Reward feet being high off ground during flip
-            params={
-                "command_name": "backflip",
-                "asset_cfg": SceneEntityCfg("robot", site_names=foot_site_names),
             },
         ),
     }
