@@ -82,3 +82,58 @@ def excessive_rotation(env, max_roll=1.0, max_yaw_rate=5.0, asset_cfg=_DEFAULT_A
   excessive_yaw = yaw_rate > max_yaw_rate
 
   return excessive_roll | excessive_yaw
+
+
+def failed_takeoff(env, command_name, check_phase=0.45, min_height=0.50):
+  """
+  Terminate early if robot hasn't achieved minimum height by check_phase.
+
+  This prevents wasting compute on episodes where the robot failed to jump.
+
+  Args:
+    check_phase: Phase at which to check (default 0.45 = after takeoff should be complete)
+    min_height: Minimum max_height that should have been achieved by check_phase
+  """
+  command_term = env.command_manager.get_term(command_name)
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+  max_height = command_term.metrics["max_height"]
+
+  # Only check after we've passed the check phase
+  past_check_phase = phase >= check_phase
+
+  # Failed if max height is below threshold
+  height_too_low = max_height < min_height
+
+  return past_check_phase & height_too_low
+
+
+def landed_upside_down(env, sensor_name, min_height=0.25, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Terminate if robot lands upside down (inverted and on ground).
+
+  Checks if:
+  1. Robot is low (height < min_height) or has foot contact
+  2. Robot is inverted (projected gravity z > 0.5)
+
+  Args:
+    min_height: Height threshold to consider "on ground"
+  """
+  asset = env.scene[asset_cfg.name]
+  sensor = env.scene[sensor_name]
+
+  # Check if on ground (low height OR foot contact)
+  current_height = asset.data.root_link_pos_w[:, 2]
+  height_low = current_height < min_height
+
+  any_contact = (sensor.data.found > 0).any(dim=-1)
+  on_ground = height_low | any_contact
+
+  # Check if inverted (gravity z in body frame > 0.5 means significantly upside down)
+  # When upright: proj_grav_z ≈ -1
+  # When inverted: proj_grav_z ≈ +1
+  proj_grav_z = asset.data.projected_gravity_b[:, 2]
+  is_inverted = proj_grav_z > 0.5
+
+  return on_ground & is_inverted

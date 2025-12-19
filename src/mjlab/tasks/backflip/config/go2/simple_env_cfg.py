@@ -262,6 +262,16 @@ terminations = {
     func=mdp.time_out,
     time_out=True,
   ),
+  "failed_takeoff": TerminationTermCfg(
+    func=mdp.failed_takeoff,
+    time_out=False,
+    params={"command_name": "backflip", "check_phase": 0.45, "min_height": 0.45},
+  ),
+  "landed_upside_down": TerminationTermCfg(
+    func=mdp.landed_upside_down,
+    time_out=False,
+    params={"sensor_name": "feet_contact", "min_height": 0.25, "asset_cfg": SceneEntityCfg("robot")},
+  ),
 }
 
 SIMPLE_GO2_BACKFLIP_ENV_CFG = ManagerBasedRlEnvCfg(
