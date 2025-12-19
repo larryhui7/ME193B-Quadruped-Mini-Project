@@ -44,6 +44,18 @@ def backflip_target_grav_z(env, command_name):
   return command[:, 3:4]
 
 
+def simple_backflip_target_x(env, command_name):
+  """Target x-position (for simple backflip command)."""
+  command = env.command_manager.get_command(command_name)
+  return command[:, 4:5]
+
+
+def base_x(env, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Current x-position of the robot base."""
+  asset = env.scene[asset_cfg.name]
+  return asset.data.root_link_pos_w[:, 0:1]
+
+
 def base_height(env, asset_cfg=_DEFAULT_ASSET_CFG):
   asset = env.scene[asset_cfg.name]
   return asset.data.root_link_pos_w[:, 2:3]

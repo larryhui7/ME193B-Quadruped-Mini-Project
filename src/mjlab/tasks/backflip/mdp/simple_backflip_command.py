@@ -13,13 +13,15 @@ from mjlab.managers.manager_term_config import CommandTermCfg
 
 class SimpleBackflipCommand(CommandTerm):
   """
-  Outputs: [phase, target_height, target_grav_x, target_grav_z]
+  Outputs: [phase, target_height, target_grav_x, target_grav_z, target_x]
 
   Trajectory phases (time-based):
     crouch (0-0.15), takeoff (0.15-0.30), airborne (0.30-0.70), land (0.70-1.0)
 
   Progress metric phases (achievement-based):
     0.0=start, 0.1=crouched, 0.25=airborne, 0.5=inverted(180°), 0.75=270°, 1.0=landed upright
+
+  2D trajectory: Robot moves backward (negative x) during flip, landing near start position.
   """
 
   cfg: SimpleBackflipCommandCfg
@@ -28,11 +30,13 @@ class SimpleBackflipCommand(CommandTerm):
     super().__init__(cfg, env)
     self.robot = env.scene[cfg.asset_name]
     self.env = env
-    self._command = torch.zeros(self.num_envs, 4, device=self.device)
+    self._command = torch.zeros(self.num_envs, 5, device=self.device)  # Added target_x
     self.dt = env.step_dt
     self.flip_steps = int(cfg.flip_duration / self.dt)
     self.metrics["max_rotation_progress"] = torch.zeros(self.num_envs, device=self.device)
     self.metrics["max_height"] = torch.zeros(self.num_envs, device=self.device)
+    # Store starting x position for relative trajectory
+    self.start_x = torch.zeros(self.num_envs, device=self.device)
     # Optional feet sensor for airborne detection
     self.feet_sensor = None
     if cfg.feet_sensor_name is not None:
@@ -154,6 +158,8 @@ class SimpleBackflipCommand(CommandTerm):
     # Reset metrics on episode reset
     self.metrics["max_rotation_progress"][env_ids] = 0.0
     self.metrics["max_height"][env_ids] = 0.0
+    # Store starting x position for relative trajectory
+    self.start_x[env_ids] = self.robot.data.root_link_pos_w[env_ids, 0]
     self._update_reference(env_ids)
 
   def _update_command(self):
@@ -166,11 +172,14 @@ class SimpleBackflipCommand(CommandTerm):
 
     target_height = self._compute_height_trajectory(phase)
     target_grav_x, target_grav_z = self._compute_orientation_trajectory(phase)
+    target_x_offset = self._compute_x_trajectory(phase)
+    target_x = self.start_x[env_ids] + target_x_offset
 
     self._command[env_ids, 0] = phase
     self._command[env_ids, 1] = target_height
     self._command[env_ids, 2] = target_grav_x
     self._command[env_ids, 3] = target_grav_z
+    self._command[env_ids, 4] = target_x
 
   def _compute_height_trajectory(self, phase):
     standing = self.cfg.standing_height
@@ -217,6 +226,31 @@ class SimpleBackflipCommand(CommandTerm):
 
     return target_grav_x, target_grav_z
 
+  def _compute_x_trajectory(self, phase):
+    """Compute backward displacement during flip.
+
+    The robot moves backward (negative x) during the flip, with peak
+    displacement around the apex, then returns near the start position.
+    """
+    backward = self.cfg.backward_displacement
+
+    x_offset = torch.zeros_like(phase)
+
+    # Crouch (0 -> 0.15): stay in place
+    # (x_offset already 0)
+
+    # Takeoff to apex (0.15 -> 0.50): move backward
+    mask2 = (phase >= 0.15) & (phase < 0.50)
+    t2 = (phase - 0.15) / 0.35
+    x_offset = torch.where(mask2, -backward * torch.sin(math.pi / 2 * t2), x_offset)
+
+    # Apex to landing (0.50 -> 1.00): return toward start
+    mask3 = phase >= 0.50
+    t3 = (phase - 0.50) / 0.50
+    x_offset = torch.where(mask3, -backward * torch.cos(math.pi / 2 * t3), x_offset)
+
+    return x_offset
+
   def _debug_vis_impl(self, visualizer):
     batch = visualizer.env_idx
     if batch >= self.num_envs:
@@ -236,6 +270,7 @@ class SimpleBackflipCommandCfg(CommandTermCfg):
   standing_height: float = 0.35
   crouch_height: float = 0.18
   peak_height: float = 0.90
+  backward_displacement: float = 0.3  # How far back (m) the robot moves at apex
   class_type: type = SimpleBackflipCommand
 
   @dataclass

@@ -87,6 +87,7 @@ commands = {
     standing_height=0.35,
     crouch_height=0.18,
     peak_height=0.90,
+    backward_displacement=0.3,  # How far back the robot moves at apex
   )
 }
 
@@ -106,6 +107,14 @@ policy_terms = {
   "target_grav_z": ObservationTermCfg(
     func=mdp.backflip_target_grav_z,
     params={"command_name": "backflip"},
+  ),
+  "target_x": ObservationTermCfg(
+    func=mdp.simple_backflip_target_x,
+    params={"command_name": "backflip"},
+  ),
+  "base_x": ObservationTermCfg(
+    func=mdp.base_x,
+    noise=Unoise(n_min=-0.02, n_max=0.02),
   ),
   "base_height": ObservationTermCfg(
     func=mdp.base_height,
@@ -189,6 +198,11 @@ rewards = {
     func=simple_rewards.track_height_simple,
     weight=1.5,
     params={"command_name": "backflip", "std": 0.15, "asset_cfg": SceneEntityCfg("robot")},
+  ),
+  "track_x": RewardTermCfg(
+    func=simple_rewards.track_x_simple,
+    weight=1.0,
+    params={"command_name": "backflip", "std": 0.2, "asset_cfg": SceneEntityCfg("robot")},
   ),
   "track_orientation": RewardTermCfg(
     func=simple_rewards.track_orientation_simple,

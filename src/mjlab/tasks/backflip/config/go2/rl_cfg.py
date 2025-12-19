@@ -15,7 +15,7 @@ UNITREE_GO2_BACKFLIP_RL_CFG = RslRlOnPolicyRunnerCfg(
     value_loss_coef=1.0,
     use_clipped_value_loss=True,
     clip_param=0.2,
-    entropy_coef=0.01,
+    entropy_coef=0.017, #explore more bc we have a couple hard gates
     num_learning_epochs=5,
     num_mini_batches=4,
     learning_rate=3e-4,
@@ -28,5 +28,5 @@ UNITREE_GO2_BACKFLIP_RL_CFG = RslRlOnPolicyRunnerCfg(
   experiment_name="backflip_go2",
   save_interval=50,
   num_steps_per_env=24,
-  max_iterations=1000,
+  max_iterations=10000,
 )

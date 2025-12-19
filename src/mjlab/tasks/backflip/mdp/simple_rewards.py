@@ -22,6 +22,18 @@ def track_height_simple(env, command_name, std=0.1, asset_cfg=_DEFAULT_ASSET_CFG
   return torch.exp(-height_error / (std**2))
 
 
+def track_x_simple(env, command_name, std=0.15, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Gaussian reward for tracking target x-position (2D trajectory)."""
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  current_x = asset.data.root_link_pos_w[:, 0]
+  target_x = command[:, 4]
+
+  x_error = torch.square(current_x - target_x)
+  return torch.exp(-x_error / (std**2))
+
+
 def track_orientation_simple(env, command_name, std=0.3, asset_cfg=_DEFAULT_ASSET_CFG):
   """Gaussian reward for tracking target orientation via projected gravity."""
   asset = env.scene[asset_cfg.name]
