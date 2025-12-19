@@ -45,7 +45,8 @@ class SimpleBackflipCommand(CommandTerm):
     grav_z = proj_grav[:, 2]
 
     # Rotation: 0 at upright, 0.5 at inverted, 1.0 back to upright
-    rotation_angle = torch.atan2(grav_x, -grav_z)
+    # For backflip (pitch backward), grav_x goes negative first, so negate it
+    rotation_angle = torch.atan2(-grav_x, -grav_z)
     rotation_frac = torch.where(
       rotation_angle >= 0,
       rotation_angle / (2 * math.pi),
@@ -182,7 +183,8 @@ class SimpleBackflipCommand(CommandTerm):
     rotation_phase = torch.clamp((phase - 0.15) / 0.85, 0.0, 1.0)
     rotation_angle = 2.0 * math.pi * rotation_phase
 
-    target_grav_x = torch.sin(rotation_angle)
+    # For backflip (pitch backward), grav_x goes negative first
+    target_grav_x = -torch.sin(rotation_angle)
     target_grav_z = -torch.cos(rotation_angle)
 
     return target_grav_x, target_grav_z
