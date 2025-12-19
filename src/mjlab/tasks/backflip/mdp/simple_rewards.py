@@ -152,19 +152,42 @@ def upward_velocity_reward(env, command_name, scale=2.0, asset_cfg=_DEFAULT_ASSE
   return torch.where(in_takeoff, reward, torch.zeros_like(reward))
 
 
-def airborne_bonus(env, sensor_name, asset_cfg=_DEFAULT_ASSET_CFG):
+def airborne_bonus(env, sensor_name, min_height=0.40, asset_cfg=_DEFAULT_ASSET_CFG):
   """
-  Simple bonus for having all feet off the ground.
+  Bonus for being properly airborne (feet off ground AND body elevated).
 
-  This explicitly encourages the robot to get airborne.
+  Requires both:
+  1. All feet off the ground
+  2. Body height above min_height (prevents sitting-on-butt hack)
   """
+  asset = env.scene[asset_cfg.name]
   sensor = env.scene[sensor_name]
 
   # Check if any foot is in contact
   any_contact = (sensor.data.found > 0).any(dim=-1)
-  is_airborne = ~any_contact
+  feet_airborne = ~any_contact
 
-  return is_airborne.float()
+  # Check body height is above threshold (prevents butt-sitting)
+  current_height = asset.data.root_link_pos_w[:, 2]
+  height_ok = current_height > min_height
+
+  # Must have both conditions
+  properly_airborne = feet_airborne & height_ok
+
+  return properly_airborne.float()
+
+
+def joint_velocity_penalty(env, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Penalize high joint velocities to discourage flailing/oscillating.
+
+  This helps prevent the robot from just swinging legs back and forth.
+  """
+  asset = env.scene[asset_cfg.name]
+  joint_vel = asset.data.joint_vel[:, :12]
+
+  # Sum of squared velocities
+  return torch.sum(torch.square(joint_vel), dim=1)
 
 
 def leg_extension_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):

@@ -195,44 +195,38 @@ events = {
 
 rewards = {
   # === SHAPING REWARDS (guide the robot toward jumping) ===
-  # These provide gradient for HOW to get airborne
   "crouch": RewardTermCfg(
     func=simple_rewards.crouch_reward,
     weight=2.0,
     params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
   ),
-  "leg_extension": RewardTermCfg(
-    func=simple_rewards.leg_extension_reward,
-    weight=3.0,
-    params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
-  ),
   "upward_velocity": RewardTermCfg(
     func=simple_rewards.upward_velocity_reward,
-    weight=4.0,
+    weight=5.0,  # Increased - this is key for jumping
     params={"command_name": "backflip", "scale": 2.0, "asset_cfg": SceneEntityCfg("robot")},
   ),
   "airborne_bonus": RewardTermCfg(
     func=simple_rewards.airborne_bonus,
-    weight=3.0,
-    params={"sensor_name": "feet_contact", "asset_cfg": SceneEntityCfg("robot")},
+    weight=4.0,
+    params={"sensor_name": "feet_contact", "min_height": 0.40, "asset_cfg": SceneEntityCfg("robot")},
   ),
 
   # === PROGRESS REWARDS (track overall backflip completion) ===
   "backflip_progress": RewardTermCfg(
     func=simple_rewards.backflip_progress_reward,
-    weight=8.0,  # Increased - this is the main goal
+    weight=10.0,  # Main goal - increased
     params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
   ),
   "max_height": RewardTermCfg(
     func=simple_rewards.max_height_reward,
-    weight=4.0,
+    weight=5.0,
     params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
   ),
 
   # === TRACKING REWARDS (follow the trajectory) ===
   "track_height": RewardTermCfg(
     func=simple_rewards.track_height_simple,
-    weight=1.0,  # Reduced - less important than getting airborne
+    weight=1.0,
     params={"command_name": "backflip", "std": 0.2, "asset_cfg": SceneEntityCfg("robot")},
   ),
   "track_orientation": RewardTermCfg(
@@ -242,11 +236,11 @@ rewards = {
   ),
   "pitch_velocity": RewardTermCfg(
     func=simple_rewards.pitch_velocity_reward,
-    weight=3.0,  # Increased for rotation
+    weight=3.0,
     params={"sensor_name": "feet_contact", "scale": 8.0, "asset_cfg": SceneEntityCfg("robot")},
   ),
 
-  # === REGULARIZATION ===
+  # === REGULARIZATION (prevent flailing) ===
   "off_axis": RewardTermCfg(
     func=simple_rewards.off_axis_simple,
     weight=-1.5,
@@ -254,7 +248,12 @@ rewards = {
   ),
   "action_rate": RewardTermCfg(
     func=simple_rewards.action_rate_simple,
-    weight=-0.005,
+    weight=-0.02,  # Increased to discourage rapid oscillations
+  ),
+  "joint_velocity": RewardTermCfg(
+    func=simple_rewards.joint_velocity_penalty,
+    weight=-0.001,  # Penalize high joint velocities (flailing)
+    params={"asset_cfg": SceneEntityCfg("robot")},
   ),
 }
 
