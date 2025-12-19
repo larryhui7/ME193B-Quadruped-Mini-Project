@@ -131,6 +131,99 @@ def pitch_velocity_reward(env, sensor_name, scale=10.0, asset_cfg=_DEFAULT_ASSET
   return torch.where(is_airborne, reward, torch.zeros_like(reward))
 
 
+def upward_velocity_reward(env, command_name, scale=2.0, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Reward upward velocity during takeoff phase (0.15-0.40).
+
+  This provides gradient toward jumping - the robot learns that
+  pushing up with its legs leads to reward.
+  """
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+  z_vel = asset.data.root_link_lin_vel_w[:, 2]
+
+  # Only reward during takeoff phase (0.15 to 0.40)
+  in_takeoff = (phase >= 0.15) & (phase < 0.40)
+
+  # Reward positive z velocity (going up)
+  reward = torch.clamp(z_vel / scale, 0.0, 1.0)
+  return torch.where(in_takeoff, reward, torch.zeros_like(reward))
+
+
+def airborne_bonus(env, sensor_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Simple bonus for having all feet off the ground.
+
+  This explicitly encourages the robot to get airborne.
+  """
+  sensor = env.scene[sensor_name]
+
+  # Check if any foot is in contact
+  any_contact = (sensor.data.found > 0).any(dim=-1)
+  is_airborne = ~any_contact
+
+  return is_airborne.float()
+
+
+def leg_extension_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Reward leg extension (straightening) during takeoff phase.
+
+  Calf joints: more negative = more bent, less negative = straighter
+  Default standing is around -1.8, fully extended is around -0.3
+
+  This shapes the crouch→extend behavior needed for jumping.
+  """
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+
+  # Calf joint indices: 2, 5, 8, 11 (every 3rd joint starting from 2)
+  calf_indices = [2, 5, 8, 11]
+  calf_positions = asset.data.joint_pos[:, calf_indices]
+
+  # Average calf angle (more negative = bent, less negative = extended)
+  avg_calf = calf_positions.mean(dim=1)
+
+  # Extension: -2.6 (crouched) to -0.3 (extended)
+  # Normalize: 0 at -2.6, 1 at -0.3
+  extension = torch.clamp((avg_calf + 2.6) / 2.3, 0.0, 1.0)
+
+  # Only reward during takeoff phase (0.15 to 0.35)
+  in_takeoff = (phase >= 0.15) & (phase < 0.35)
+
+  return torch.where(in_takeoff, extension, torch.zeros_like(extension))
+
+
+def crouch_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Reward crouching (lowering height) during crouch phase.
+
+  This shapes the preparation for the jump.
+  """
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+  current_height = asset.data.root_link_pos_w[:, 2]
+
+  # Standing ~0.35, crouch target ~0.18
+  # Reward for getting lower (closer to 0.18)
+  crouch_target = 0.18
+  standing = 0.35
+
+  # How much we've crouched (0 at standing, 1 at target)
+  crouch_amount = torch.clamp((standing - current_height) / (standing - crouch_target), 0.0, 1.0)
+
+  # Only during crouch phase (0 to 0.15)
+  in_crouch = phase < 0.15
+
+  return torch.where(in_crouch, crouch_amount, torch.zeros_like(crouch_amount))
+
+
 def motion_imitation_reward(env, command_name, std=0.5, asset_cfg=_DEFAULT_ASSET_CFG):
   """
   Reward for imitating reference joint trajectory.
