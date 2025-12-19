@@ -74,3 +74,21 @@ def max_height_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   peak = command_term.cfg.peak_height
   # Normalize: 0 at standing, 1 at peak
   return torch.clamp((max_height - standing) / (peak - standing), 0.0, 1.0)
+
+
+def pitch_velocity_reward(env, sensor_name, scale=10.0, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Reward backward pitch rate while airborne (encourages faster rotation)."""
+  asset = env.scene[asset_cfg.name]
+  sensor = env.scene[sensor_name]
+
+  # Check if airborne (no foot contacts)
+  any_contact = (sensor.data.found > 0).any(dim=-1)
+  is_airborne = ~any_contact
+
+  # Pitch rate: Y-axis angular velocity in body frame
+  # Positive pitch rate = backward rotation (for backflip)
+  pitch_rate = asset.data.root_link_ang_vel_b[:, 1]
+
+  # Only reward positive (backward) pitch rate, and only while airborne
+  reward = torch.clamp(pitch_rate / scale, 0.0, 1.0)
+  return torch.where(is_airborne, reward, torch.zeros_like(reward))

@@ -44,14 +44,33 @@ class SimpleBackflipCommand(CommandTerm):
     grav_x = proj_grav[:, 0]
     grav_z = proj_grav[:, 2]
 
-    # Rotation: 0 at upright, 0.5 at inverted, 1.0 back to upright
-    # For backflip (pitch backward), grav_x goes negative first, so negate it
-    rotation_angle = torch.atan2(-grav_x, -grav_z)
-    rotation_frac = torch.where(
-      rotation_angle >= 0,
-      rotation_angle / (2 * math.pi),
-      (rotation_angle + 2 * math.pi) / (2 * math.pi)
-    )
+    # Simpler approach: track rotation based on quadrant
+    # Backflip goes: Q1 (upright) -> Q2 (nose up) -> Q3 (inverted) -> Q4 (nose down) -> Q1
+    # Q1: grav_x >= 0, grav_z <= 0 (upright, or small forward lean) -> 0 or ~1.0
+    # Q2: grav_x < 0, grav_z <= 0 (backward pitch, nose up) -> 0 to 0.25
+    # Q3: grav_x < 0, grav_z > 0 (past vertical, approaching inverted) -> 0.25 to 0.5
+    # Q4: grav_x >= 0, grav_z > 0 (past inverted, coming back) -> 0.5 to 0.75
+    # Then back to Q1 -> 0.75 to 1.0
+
+    # First half: nose up (grav_x < 0)
+    in_first_half = grav_x < 0
+    # Angle from upright toward inverted (0 to π)
+    first_half_angle = torch.atan2(-grav_x, -grav_z)  # 0 at upright, π at inverted
+    first_half_frac = torch.clamp(first_half_angle / math.pi, 0.0, 1.0) * 0.5
+
+    # Second half (180°-270°): past inverted, coming back (grav_x >= 0 AND grav_z >= 0)
+    in_second_half = (grav_x >= 0) & (grav_z >= 0)
+    # Angle from inverted toward 270°
+    second_half_angle = torch.atan2(grav_x, grav_z)  # 0 at inverted, π/2 at 270°
+    second_half_frac = 0.5 + torch.clamp(second_half_angle / math.pi, 0.0, 0.5)
+
+    # Note: Final quarter (270°-360°) is handled by landing phase when on_ground
+    # We don't track it here to avoid giving credit for forward pitch at start
+
+    # Combine: second half if applicable, else first half, else 0 (forward pitch)
+    rotation_frac = torch.where(in_second_half, second_half_frac,
+                   torch.where(in_first_half, first_half_frac,
+                              torch.zeros_like(grav_x)))
 
     current_height = self.robot.data.root_link_pos_w[:, 2]
     self.metrics["max_height"] = torch.maximum(self.metrics["max_height"], current_height)

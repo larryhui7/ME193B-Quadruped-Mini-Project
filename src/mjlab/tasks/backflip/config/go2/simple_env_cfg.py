@@ -205,6 +205,11 @@ rewards = {
     weight=3.0,
     params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
   ),
+  "pitch_velocity": RewardTermCfg(
+    func=simple_rewards.pitch_velocity_reward,
+    weight=2.0,
+    params={"sensor_name": "feet_contact", "scale": 10.0, "asset_cfg": SceneEntityCfg("robot")},
+  ),
   "off_axis": RewardTermCfg(
     func=simple_rewards.off_axis_simple,
     weight=-2.0,
