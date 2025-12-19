@@ -267,6 +267,11 @@ terminations = {
     time_out=False,
     params={"command_name": "backflip", "check_phase": 0.45, "min_height": 0.45},
   ),
+  "insufficient_rotation": TerminationTermCfg(
+    func=mdp.insufficient_rotation,
+    time_out=False,
+    params={"command_name": "backflip", "check_phase": 0.65, "min_rotation_progress": 0.5},
+  ),
   "landed_upside_down": TerminationTermCfg(
     func=mdp.landed_upside_down,
     time_out=False,

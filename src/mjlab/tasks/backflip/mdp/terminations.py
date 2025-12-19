@@ -137,3 +137,31 @@ def landed_upside_down(env, sensor_name, min_height=0.25, asset_cfg=_DEFAULT_ASS
   is_inverted = proj_grav_z > 0.5
 
   return on_ground & is_inverted
+
+
+def insufficient_rotation(env, command_name, check_phase=0.65, min_rotation_progress=0.5):
+  """
+  Terminate if robot hasn't rotated past 180 degrees by check_phase.
+
+  Uses the max_rotation_progress metric from the command generator:
+  - 0.25 = airborne
+  - 0.5 = past 180 degrees (inverted)
+  - 0.75 = past 270 degrees
+
+  Args:
+    check_phase: Phase at which to check rotation (default 0.65)
+    min_rotation_progress: Minimum rotation progress required (0.5 = 180 degrees)
+  """
+  command_term = env.command_manager.get_term(command_name)
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+  rotation_progress = command_term.metrics["max_rotation_progress"]
+
+  # Only check after we've passed the check phase
+  past_check_phase = phase >= check_phase
+
+  # Failed if rotation progress is below threshold
+  not_enough_rotation = rotation_progress < min_rotation_progress
+
+  return past_check_phase & not_enough_rotation
