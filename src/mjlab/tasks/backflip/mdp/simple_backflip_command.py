@@ -89,23 +89,24 @@ class SimpleBackflipCommand(CommandTerm):
     new_progress = torch.where(in_takeoff_phase, torch.maximum(new_progress, takeoff_progress_airborne), new_progress)
 
     # Phase 0.25->0.5: Rotating to inverted (rotation 0 -> 0.5 = 0° -> 180°)
-    # Must be airborne AND above minimum height to get rotation credit
+    # Must be airborne to get rotation credit; height gives bonus
     takeoff_done = new_progress >= 0.25
     in_rotation_phase = takeoff_done & (current_progress < 0.5)
-    min_rotation_height = standing + 0.3 * (self.cfg.peak_height - standing)
-    high_enough = current_height > min_rotation_height
+    # Height bonus: 0.5 base credit + 0.5 bonus for height (so even low jumps get credit)
+    height_bonus = torch.clamp((current_height - standing) / (self.cfg.peak_height - standing), 0.0, 1.0)
+    credit_scale = 0.5 + 0.5 * height_bonus  # ranges from 0.5 to 1.0
     # Progress based on rotation angle
     rotation_to_inverted = torch.clamp(rotation_frac / 0.5, 0.0, 1.0)
-    rotation_progress = 0.25 + 0.25 * rotation_to_inverted
-    # Only count if airborne AND high enough
-    new_progress = torch.where(in_rotation_phase & is_airborne & high_enough, torch.maximum(new_progress, rotation_progress), new_progress)
+    rotation_progress = 0.25 + 0.25 * rotation_to_inverted * credit_scale
+    # Only count if airborne
+    new_progress = torch.where(in_rotation_phase & is_airborne, torch.maximum(new_progress, rotation_progress), new_progress)
 
     # Phase 0.5->0.75: Complete flip (rotation 0.5 -> 1.0 = 180° -> 360°, must be airborne)
     at_inverted = new_progress >= 0.5
     in_flip_phase = at_inverted & (current_progress < 0.75)
-    # rotation_frac 0.5->1.0 maps to phase 0.5->0.75
+    # rotation_frac 0.5->1.0 maps to phase 0.5->0.75, with same height bonus
     flip_frac = torch.clamp((rotation_frac - 0.5) / 0.5, 0.0, 1.0)
-    flip_progress = 0.5 + 0.25 * flip_frac
+    flip_progress = 0.5 + 0.25 * flip_frac * credit_scale
     # Must be airborne
     new_progress = torch.where(in_flip_phase & is_airborne, torch.maximum(new_progress, flip_progress), new_progress)
 
