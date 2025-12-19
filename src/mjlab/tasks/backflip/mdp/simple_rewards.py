@@ -3,11 +3,36 @@
 from __future__ import annotations
 
 import math
+import os
+import numpy as np
 import torch
 
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 
 _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
+
+# Load reference trajectory for motion imitation
+_REF_DATA_PATH = os.path.join(os.path.dirname(__file__), "backflip_reference_phase.npz")
+_REF_DATA = None
+_REF_POSITIONS = None
+_REF_POSITIONS_DEVICE = {}
+
+
+def _load_reference():
+  global _REF_DATA, _REF_POSITIONS
+  if _REF_DATA is None and os.path.exists(_REF_DATA_PATH):
+    _REF_DATA = np.load(_REF_DATA_PATH)
+    _REF_POSITIONS = torch.from_numpy(_REF_DATA["positions"]).float()
+
+
+def _get_ref_positions(device):
+  """Get reference positions on the correct device."""
+  _load_reference()
+  if _REF_POSITIONS is None:
+    return None
+  if device not in _REF_POSITIONS_DEVICE:
+    _REF_POSITIONS_DEVICE[device] = _REF_POSITIONS.to(device)
+  return _REF_POSITIONS_DEVICE[device]
 
 
 def track_height_simple(env, command_name, std=0.1, asset_cfg=_DEFAULT_ASSET_CFG):
@@ -104,3 +129,39 @@ def pitch_velocity_reward(env, sensor_name, scale=10.0, asset_cfg=_DEFAULT_ASSET
   # Only reward positive (backward) pitch rate, and only while airborne
   reward = torch.clamp(pitch_rate / scale, 0.0, 1.0)
   return torch.where(is_airborne, reward, torch.zeros_like(reward))
+
+
+def motion_imitation_reward(env, command_name, std=0.5, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Reward for imitating reference joint trajectory.
+
+  Compares current joint positions to keyframe-defined reference at current phase.
+  """
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  device = command.device
+
+  # Get reference positions
+  ref_positions = _get_ref_positions(device)
+  if ref_positions is None:
+    return torch.zeros(env.num_envs, device=device)
+
+  # Get current phase (0 to 1)
+  phase = command[:, 0]
+  n_phases = ref_positions.shape[0]
+
+  # Find nearest phase index
+  phase_idx = (phase * (n_phases - 1)).long()
+  phase_idx = torch.clamp(phase_idx, 0, n_phases - 1)
+
+  # Get reference joint positions for current phase
+  ref_joint_pos = ref_positions[phase_idx]  # (num_envs, 12)
+
+  # Get current joint positions
+  current_joint_pos = asset.data.joint_pos[:, :12]
+
+  # Position error (sum of squared differences)
+  pos_error = torch.sum(torch.square(current_joint_pos - ref_joint_pos), dim=1)
+
+  # Gaussian reward
+  return torch.exp(-pos_error / (std**2))
