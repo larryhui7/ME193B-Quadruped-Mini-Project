@@ -1,11 +1,4 @@
-"""Simplified Go2 backflip environment - minimal rewards following PDF guidance.
-
-Key design choices (from PDF Section 3b):
-1. Command outputs simple reference quantities (height + orientation)
-2. Coarse, hand-crafted trajectory shapes are sufficient
-3. Small number of straightforward reward terms
-4. Phase variable parameterizes progress through the flip
-"""
+"""Simplified Go2 backflip environment."""
 
 from copy import deepcopy
 
@@ -30,10 +23,9 @@ from mjlab.asset_zoo.robots.unitree_go2.go2_constants import (
   get_go2_robot_cfg,
 )
 
-# Import simple components
 from mjlab.tasks.backflip.mdp.simple_backflip_command import SimpleBackflipCommandCfg
 from mjlab.tasks.backflip.mdp import simple_rewards
-from mjlab.tasks.backflip import mdp  # For standard observations and events
+from mjlab.tasks.backflip import mdp
 
 
 SCENE_CFG = SceneCfg(
@@ -61,8 +53,6 @@ SIM_CFG = SimulationCfg(
   ),
 )
 
-
-# Simple env config
 scene = deepcopy(SCENE_CFG)
 scene.entities = {"robot": get_go2_robot_cfg()}
 
@@ -75,22 +65,18 @@ actions = {
   )
 }
 
-# Simple time-based command with crouch-then-jump trajectory
 commands = {
   "backflip": SimpleBackflipCommandCfg(
     asset_name="robot",
-    resampling_time_range=(100.0, 100.0),  # Never resample
-    flip_duration=1.0,  # 1 second total (including crouch)
+    resampling_time_range=(100.0, 100.0),
+    flip_duration=1.0,
     standing_height=0.35,
-    crouch_height=0.18,  # Deeper crouch for more explosive power
-    peak_height=0.90,  # Higher peak = more air time (~0.72s, needs ~8.7 rad/s)
+    crouch_height=0.18,
+    peak_height=0.90,
   )
 }
 
-# Observations following PDF Section 1f guidance
-# Policy sees: command info + proprioception (with noise)
 policy_terms = {
-  # Command information (what to track)
   "phase": ObservationTermCfg(
     func=mdp.backflip_phase,
     params={"command_name": "backflip"},
@@ -107,7 +93,6 @@ policy_terms = {
     func=mdp.backflip_target_grav_z,
     params={"command_name": "backflip"},
   ),
-  # Proprioception (with noise for robustness)
   "base_height": ObservationTermCfg(
     func=mdp.base_height,
     noise=Unoise(n_min=-0.02, n_max=0.02),
@@ -137,20 +122,12 @@ policy_terms = {
   ),
 }
 
-# Critic gets clean observations (asymmetric critic training)
 critic_terms = {
   **policy_terms,
   "base_orientation_quat": ObservationTermCfg(
     func=mdp.base_orientation_quat,
   ),
 }
-# Remove noise from critic observations
-for key in critic_terms:
-  if hasattr(critic_terms[key], 'noise'):
-    critic_terms[key] = ObservationTermCfg(
-      func=critic_terms[key].func,
-      params=critic_terms[key].params if hasattr(critic_terms[key], 'params') else {},
-    )
 
 observations = {
   "policy": ObservationGroupCfg(
@@ -165,7 +142,6 @@ observations = {
   ),
 }
 
-# Simple reset events
 events = {
   "reset_base": EventTermCfg(
     func=mdp.reset_root_state_uniform,
@@ -186,42 +162,33 @@ events = {
   ),
 }
 
-# MINIMAL REWARDS - following PDF "small number of straightforward reward terms"
 rewards = {
-  # Track height trajectory (Gaussian)
   "track_height": RewardTermCfg(
     func=simple_rewards.track_height_simple,
-    weight=2.0,
-    params={
-      "command_name": "backflip",
-      "std": 0.1,
-      "asset_cfg": SceneEntityCfg("robot"),
-    },
+    weight=1.5,
+    params={"command_name": "backflip", "std": 0.15, "asset_cfg": SceneEntityCfg("robot")},
   ),
-  # Track orientation via projected gravity (Gaussian)
   "track_orientation": RewardTermCfg(
     func=simple_rewards.track_orientation_simple,
-    weight=3.0,  # Slightly higher to encourage rotation
-    params={
-      "command_name": "backflip",
-      "std": 0.3,
-      "asset_cfg": SceneEntityCfg("robot"),
-    },
+    weight=2.0,
+    params={"command_name": "backflip", "std": 0.4, "asset_cfg": SceneEntityCfg("robot")},
   ),
-  # Penalize off-axis rotation (we want pure pitch, not roll/yaw)
+  "backflip_progress": RewardTermCfg(
+    func=simple_rewards.backflip_progress_reward,
+    weight=5.0,
+    params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
+  ),
   "off_axis": RewardTermCfg(
     func=simple_rewards.off_axis_simple,
-    weight=-1.0,
+    weight=-2.0,
     params={"asset_cfg": SceneEntityCfg("robot")},
   ),
-  # Small action smoothness penalty
   "action_rate": RewardTermCfg(
     func=simple_rewards.action_rate_simple,
     weight=-0.01,
   ),
 }
 
-# Simple termination - just timeout
 terminations = {
   "time_out": TerminationTermCfg(
     func=mdp.time_out,
@@ -229,7 +196,6 @@ terminations = {
   ),
 }
 
-# Create the config
 SIMPLE_GO2_BACKFLIP_ENV_CFG = ManagerBasedRlEnvCfg(
   scene=scene,
   observations=observations,
@@ -241,5 +207,5 @@ SIMPLE_GO2_BACKFLIP_ENV_CFG = ManagerBasedRlEnvCfg(
   sim=SIM_CFG,
   viewer=VIEWER_CONFIG,
   decimation=2,
-  episode_length_s=1.5,  # 1.5s episodes (1s flip + buffer)
+  episode_length_s=1.5,
 )
