@@ -125,18 +125,22 @@ def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   phase = command[:, 0]
   vertical_vel = asset.data.root_link_lin_vel_w[:, 2]
   pitch_vel = asset.data.root_link_ang_vel_b[:, 1]  # negative = backward rotation
+  backward_vel = -asset.data.root_link_lin_vel_w[:, 0]  # negative x = backward
 
   # Active after crouch (phi > 0.1) but before mid-flip (phi < 0.4)
   takeoff_mask = ((phase >= 0.1) & (phase < 0.4)).float()
 
   # Reward upward velocity
-  upward_reward = torch.clamp(vertical_vel / 5.0, 0.0, 1.0)
+  upward_reward = torch.clamp(vertical_vel / 3.0, 0.0, 1.0)
 
   # Reward backward pitch velocity (negative pitch_vel = backward)
-  backward_reward = torch.clamp(-pitch_vel / 8.0, 0.0, 1.0)
+  rotation_reward = torch.clamp(-pitch_vel / 6.0, 0.0, 1.0)
 
-  # Multiplicative: need BOTH to get full reward (explode backwards, not just jump)
-  return takeoff_mask * upward_reward * backward_reward
+  # Reward backward linear velocity (moving backwards)
+  backward_reward = torch.clamp(backward_vel / 2.0, 0.0, 1.0)
+
+  # Multiplicative: need upward + rotation, with bonus for backward movement
+  return takeoff_mask * upward_reward * rotation_reward * (0.5 + 0.5 * backward_reward)
 
 
 def crouch_incentive(env, standing_height=0.35, crouch_steps=30, asset_cfg=_DEFAULT_ASSET_CFG):

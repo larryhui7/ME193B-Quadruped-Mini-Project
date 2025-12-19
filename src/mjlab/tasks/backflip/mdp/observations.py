@@ -67,6 +67,14 @@ def height_error(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   return target_height - current_height
 
 
+def x_error(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+  current_x = asset.data.root_link_pos_w[:, 0:1]
+  target_x = command[:, 5:6]
+  return target_x - current_x
+
+
 def cumulative_pitch(env, asset_cfg=_DEFAULT_ASSET_CFG):
   asset = env.scene[asset_cfg.name]
   return asset.data.root_link_ang_vel_b[:, 1:2]

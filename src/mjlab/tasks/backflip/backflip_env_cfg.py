@@ -108,8 +108,8 @@ def create_backflip_env_cfg(
             func=mdp.backflip_target_pitch_vel,
             params={"command_name": "backflip"},
         ),
-        "target_x": ObservationTermCfg(
-            func=mdp.backflip_target_x,
+        "x_error": ObservationTermCfg(
+            func=mdp.x_error,
             params={"command_name": "backflip"},
         ),
         "base_height": ObservationTermCfg(
@@ -241,6 +241,15 @@ def create_backflip_env_cfg(
             weight=17.0,
             params={
                 "command_name": "backflip",
+                "asset_cfg": SceneEntityCfg("robot"),
+            },
+        ),
+        "crouch_incentive": RewardTermCfg(
+            func=mdp.crouch_incentive,
+            weight=5.0,
+            params={
+                "standing_height": standing_height,
+                "crouch_steps": 50,
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
