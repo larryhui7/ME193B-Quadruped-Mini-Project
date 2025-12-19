@@ -15,7 +15,11 @@ class SimpleBackflipCommand(CommandTerm):
   """
   Outputs: [phase, target_height, target_grav_x, target_grav_z]
 
-  Phases: crouch (0-0.15), takeoff (0.15-0.30), airborne (0.30-0.70), land (0.70-1.0)
+  Trajectory phases (time-based):
+    crouch (0-0.15), takeoff (0.15-0.30), airborne (0.30-0.70), land (0.70-1.0)
+
+  Progress metric phases (achievement-based):
+    0.0=start, 0.1=crouched, 0.25=airborne, 0.5=inverted(180°), 0.75=270°, 1.0=landed upright
   """
 
   cfg: SimpleBackflipCommandCfg
@@ -76,7 +80,7 @@ class SimpleBackflipCommand(CommandTerm):
     self.metrics["max_height"] = torch.maximum(self.metrics["max_height"], current_height)
 
     # Phase-based progress with smooth interpolation within phases
-    # Phases: 0=start, 0.1=crouch, 0.25=takeoff, 0.5=vertical, 0.75=inverted, 1.0=land
+    # Phases: 0=start, 0.1=crouch, 0.25=takeoff, 0.5=inverted(180°), 0.75=270°, 1.0=land
     current_progress = self.metrics["max_rotation_progress"]
     new_progress = current_progress.clone()
 
@@ -121,12 +125,16 @@ class SimpleBackflipCommand(CommandTerm):
     # Only count if airborne
     new_progress = torch.where(in_rotation_phase & is_airborne, torch.maximum(new_progress, rotation_progress), new_progress)
 
-    # Phase 0.5->0.75: Complete flip (rotation 0.5 -> 1.0 = 180° -> 360°, must be airborne)
+    # Phase 0.5->0.75: Complete flip (rotation 0.5 -> 1.0 = 180° -> 270°, must be airborne)
+    # Note: 270°-360° is handled by landing phase to avoid giving credit for forward pitch
     at_inverted = new_progress >= 0.5
     in_flip_phase = at_inverted & (current_progress < 0.75)
-    # rotation_frac 0.5->1.0 maps to phase 0.5->0.75, with same height bonus
+    # rotation_frac 0.5->1.0 maps to phase 0.5->0.75
+    # Use max_height for credit_scale so falling doesn't penalize progress
+    max_height_bonus = torch.clamp((self.metrics["max_height"] - standing) / (self.cfg.peak_height - standing), 0.0, 1.0)
+    flip_credit_scale = 0.5 + 0.5 * max_height_bonus
     flip_frac = torch.clamp((rotation_frac - 0.5) / 0.5, 0.0, 1.0)
-    flip_progress = 0.5 + 0.25 * flip_frac * credit_scale
+    flip_progress = 0.5 + 0.25 * flip_frac * flip_credit_scale
     # Must be airborne
     new_progress = torch.where(in_flip_phase & is_airborne, torch.maximum(new_progress, flip_progress), new_progress)
 
@@ -198,8 +206,9 @@ class SimpleBackflipCommand(CommandTerm):
     return height
 
   def _compute_orientation_trajectory(self, phase):
-    # Rotation starts after crouch (phase > 0.15)
-    rotation_phase = torch.clamp((phase - 0.15) / 0.85, 0.0, 1.0)
+    # Rotation happens between takeoff (0.15) and landing (0.70)
+    # Complete full 360° before landing so robot is upright when touching down
+    rotation_phase = torch.clamp((phase - 0.15) / 0.55, 0.0, 1.0)
     rotation_angle = 2.0 * math.pi * rotation_phase
 
     # For backflip (pitch backward), grav_x goes negative first
