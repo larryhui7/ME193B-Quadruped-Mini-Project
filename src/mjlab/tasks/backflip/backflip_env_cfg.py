@@ -224,7 +224,7 @@ def create_backflip_env_cfg(
         ),
         "track_pitch_velocity": RewardTermCfg(
             func=mdp.track_pitch_velocity,
-            weight=3.0,
+            weight=6.0,  # Increased from 3.0 to drive rotation harder
             params={
                 "command_name": "backflip",
                 "std": 2.0,
@@ -251,8 +251,17 @@ def create_backflip_env_cfg(
         ),
         "off_axis": RewardTermCfg(
             func=mdp.off_axis_penalty,
-            weight=-5.0,
+            weight=-2.0,  # Reduced from -5.0 to be less restrictive during flip
             params={"asset_cfg": SceneEntityCfg("robot")},
+        ),
+        "insufficient_rotation": RewardTermCfg(
+            func=mdp.insufficient_rotation_penalty,
+            weight=-8.0,  # Penalize slow rotation during mid-flip
+            params={
+                "command_name": "backflip",
+                "min_pitch_vel": 2.0,  # Minimum pitch velocity threshold (rad/s)
+                "asset_cfg": SceneEntityCfg("robot"),
+            },
         ),
         "takeoff_impulse": RewardTermCfg(
             func=mdp.takeoff_impulse,
@@ -277,6 +286,14 @@ def create_backflip_env_cfg(
             params={
                 "command_name": "backflip",
                 "sensor_name": feet_sensor_name,
+            },
+        ),
+        "rotation_consistency": RewardTermCfg(
+            func=mdp.rotation_consistency,
+            weight=3.0,  # Reward maintaining backward rotation throughout flip
+            params={
+                "command_name": "backflip",
+                "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
     }

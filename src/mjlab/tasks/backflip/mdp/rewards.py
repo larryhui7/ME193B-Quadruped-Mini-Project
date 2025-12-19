@@ -74,10 +74,20 @@ def upright_at_landing(env, command_name, std, asset_cfg=_DEFAULT_ASSET_CFG):
   return reward * landing_mask
 
 
-def rotation_consistency(env, asset_cfg=_DEFAULT_ASSET_CFG):
+def rotation_consistency(env, command_name=None, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Reward maintaining backward pitch velocity during flip phase."""
   asset = env.scene[asset_cfg.name]
   pitch_vel = asset.data.root_link_ang_vel_b[:, 1]
-  return torch.clamp(-pitch_vel / 10.0, 0.0, 1.0)
+  rotation_reward = torch.clamp(-pitch_vel / 10.0, 0.0, 1.0)
+
+  # If command_name provided, only apply during flip phase
+  if command_name is not None:
+    command = env.command_manager.get_command(command_name)
+    phase = command[:, 0]
+    flip_mask = ((phase >= 0.1) & (phase < 0.9)).float()
+    return rotation_reward * flip_mask
+
+  return rotation_reward
 
 
 def insufficient_rotation_penalty(env, command_name, min_pitch_vel=3.0, asset_cfg=_DEFAULT_ASSET_CFG):
@@ -127,17 +137,17 @@ def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   pitch_vel = asset.data.root_link_ang_vel_b[:, 1]  # negative = backward rotation
   backward_vel = -asset.data.root_link_lin_vel_w[:, 0]  # negative x = backward
 
-  # Active after crouch (phi > 0.1) but before mid-flip (phi < 0.4)
-  takeoff_mask = ((phase >= 0.1) & (phase < 0.4)).float()
+  # Active after crouch (phi > 0.1) through early flip (phi < 0.5) - extended window
+  takeoff_mask = ((phase >= 0.1) & (phase < 0.5)).float()
 
-  # Reward upward velocity (lowered threshold for easier initial learning)
-  upward_reward = torch.clamp(vertical_vel / 2.0, 0.0, 1.0)
+  # Reward upward velocity - need at least 1.5 m/s for a good flip
+  upward_reward = torch.clamp(vertical_vel / 1.5, 0.0, 1.0)
 
-  # Reward backward pitch velocity (lowered threshold)
-  rotation_reward = torch.clamp(-pitch_vel / 4.0, 0.0, 1.0)
+  # Reward backward pitch velocity - need strong rotation (at least 3 rad/s)
+  rotation_reward = torch.clamp(-pitch_vel / 3.0, 0.0, 1.0)
 
   # Reward backward linear velocity (moving backwards)
-  backward_reward = torch.clamp(backward_vel / 1.5, 0.0, 1.0)
+  backward_reward = torch.clamp(backward_vel / 1.0, 0.0, 1.0)
 
   # Multiplicative: need upward + rotation, with bonus for backward movement
   return takeoff_mask * upward_reward * rotation_reward * (0.5 + 0.5 * backward_reward)
