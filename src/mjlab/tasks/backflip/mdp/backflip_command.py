@@ -172,8 +172,8 @@ class BackflipPhaseCommandCfg(CommandTermCfg):
   standing_height: float = 0.35
   peak_height: float = 0.7
   crouch_duration: float = 0.5  # Max time to crouch before flip (seconds)
-  crouch_depth: float = 0.1  # How much to lower during crouch (meters)
-  backward_distance: float = 0.3  # How far backward the arc goes (meters)
+  crouch_depth: float = 0.15  # How much to lower during crouch (meters) - deeper for more power
+  backward_distance: float = 0.15  # How far backward the arc goes (meters) - reduced for easier learning
   class_type: type = BackflipPhaseCommand
 
   @dataclass

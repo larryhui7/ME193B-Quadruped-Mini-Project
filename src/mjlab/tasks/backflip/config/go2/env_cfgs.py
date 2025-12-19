@@ -44,6 +44,6 @@ UNITREE_GO2_BACKFLIP_ENV_CFG = create_backflip_env_cfg(
   feet_sensor_cfg=GO2_FEET_SENSOR_CFG,
   self_collision_sensor_cfg=GO2_SELF_COLLISION_SENSOR_CFG,
   standing_height=0.35,  # Go2 standing height
-  peak_height=0.75,      # Target peak height during flip (Go2 is slightly bigger)
-  flip_duration=0.8,     # Duration of the backflip
+  peak_height=0.85,      # Target peak height during flip (higher for more room)
+  flip_duration=1.0,     # Duration of the backflip (longer = lower required angular velocity)
 )

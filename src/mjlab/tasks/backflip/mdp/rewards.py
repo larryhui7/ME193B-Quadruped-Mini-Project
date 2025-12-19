@@ -130,14 +130,14 @@ def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   # Active after crouch (phi > 0.1) but before mid-flip (phi < 0.4)
   takeoff_mask = ((phase >= 0.1) & (phase < 0.4)).float()
 
-  # Reward upward velocity
-  upward_reward = torch.clamp(vertical_vel / 3.0, 0.0, 1.0)
+  # Reward upward velocity (lowered threshold for easier initial learning)
+  upward_reward = torch.clamp(vertical_vel / 2.0, 0.0, 1.0)
 
-  # Reward backward pitch velocity (negative pitch_vel = backward)
-  rotation_reward = torch.clamp(-pitch_vel / 6.0, 0.0, 1.0)
+  # Reward backward pitch velocity (lowered threshold)
+  rotation_reward = torch.clamp(-pitch_vel / 4.0, 0.0, 1.0)
 
   # Reward backward linear velocity (moving backwards)
-  backward_reward = torch.clamp(backward_vel / 2.0, 0.0, 1.0)
+  backward_reward = torch.clamp(backward_vel / 1.5, 0.0, 1.0)
 
   # Multiplicative: need upward + rotation, with bonus for backward movement
   return takeoff_mask * upward_reward * rotation_reward * (0.5 + 0.5 * backward_reward)

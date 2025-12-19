@@ -96,6 +96,9 @@ def create_backflip_env_cfg(
         )
     }
 
+    # Sensor name for foot-related observations and rewards
+    feet_sensor_name = feet_sensor_cfg.name
+
     policy_terms = {
         "backflip_phase": ObservationTermCfg(
             func=mdp.backflip_phase,
@@ -143,8 +146,6 @@ def create_backflip_env_cfg(
     }
 
     # Privileged critic observations (foot-related)
-    feet_sensor_name = feet_sensor_cfg.name
-
     critic_terms = {
         **policy_terms,
         "target_pitch": ObservationTermCfg(
@@ -268,6 +269,14 @@ def create_backflip_env_cfg(
                 "standing_height": standing_height,
                 "crouch_steps": 50,
                 "asset_cfg": SceneEntityCfg("robot"),
+            },
+        ),
+        "air_time_during_flip": RewardTermCfg(
+            func=mdp.air_time_during_flip,
+            weight=5.0,
+            params={
+                "command_name": "backflip",
+                "sensor_name": feet_sensor_name,
             },
         ),
     }
