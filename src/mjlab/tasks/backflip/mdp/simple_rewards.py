@@ -64,3 +64,13 @@ def backflip_progress_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   # Reward is simply the phase progress value
   # 0.0 = nothing, 0.1 = crouched, 0.25 = took off, 0.5 = past vertical, 0.75 = inverted, 1.0 = landing
   return phase_progress
+
+
+def max_height_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Reward for max height achieved during episode (encourages higher jumps)."""
+  command_term = env.command_manager.get_term(command_name)
+  max_height = command_term.metrics["max_height"]
+  standing = command_term.cfg.standing_height
+  peak = command_term.cfg.peak_height
+  # Normalize: 0 at standing, 1 at peak
+  return torch.clamp((max_height - standing) / (peak - standing), 0.0, 1.0)
