@@ -114,6 +114,13 @@ def foot_contact(env, sensor_name):
   return (sensor.data.found > 0).float()
 
 
+def all_feet_airborne(env, sensor_name):
+  """1.0 if all feet are off ground, 0.0 otherwise."""
+  sensor = env.scene[sensor_name]
+  any_contact = (sensor.data.found > 0).any(dim=-1, keepdim=True)
+  return (~any_contact).float()
+
+
 def foot_contact_forces(env, sensor_name):
   """Contact forces on each foot (log-scaled)."""
   sensor = env.scene[sensor_name]

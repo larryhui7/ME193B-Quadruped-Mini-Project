@@ -13,6 +13,7 @@ from mjlab.managers.manager_term_config import (
 )
 from mjlab.managers.scene_entity_config import SceneEntityCfg
 from mjlab.scene import SceneCfg
+from mjlab.sensor import ContactMatch, ContactSensorCfg
 from mjlab.sim import MujocoCfg, SimulationCfg
 from mjlab.terrains import TerrainImporterCfg
 from mjlab.utils.noise import UniformNoiseCfg as Unoise
@@ -27,6 +28,17 @@ from mjlab.tasks.backflip.mdp.simple_backflip_command import SimpleBackflipComma
 from mjlab.tasks.backflip.mdp import simple_rewards
 from mjlab.tasks.backflip import mdp
 
+# Foot contact sensor
+GO2_FOOT_GEOMS = ("FR_foot_collision", "FL_foot_collision", "RR_foot_collision", "RL_foot_collision")
+FEET_SENSOR_CFG = ContactSensorCfg(
+  name="feet_contact",
+  primary=ContactMatch(mode="geom", pattern=GO2_FOOT_GEOMS, entity="robot"),
+  secondary=ContactMatch(mode="body", pattern="terrain"),
+  fields=("found",),
+  reduce="none",
+  num_slots=1,
+  track_air_time=True,
+)
 
 SCENE_CFG = SceneCfg(
   terrain=TerrainImporterCfg(terrain_type="plane"),
@@ -55,6 +67,7 @@ SIM_CFG = SimulationCfg(
 
 scene = deepcopy(SCENE_CFG)
 scene.entities = {"robot": get_go2_robot_cfg()}
+scene.sensors = {"feet_contact": FEET_SENSOR_CFG}
 
 actions = {
   "joint_pos": JointPositionActionCfg(
@@ -68,6 +81,7 @@ actions = {
 commands = {
   "backflip": SimpleBackflipCommandCfg(
     asset_name="robot",
+    feet_sensor_name="feet_contact",
     resampling_time_range=(100.0, 100.0),
     flip_duration=1.0,
     standing_height=0.35,
@@ -126,6 +140,14 @@ critic_terms = {
   **policy_terms,
   "base_orientation_quat": ObservationTermCfg(
     func=mdp.base_orientation_quat,
+  ),
+  "foot_contact": ObservationTermCfg(
+    func=mdp.foot_contact,
+    params={"sensor_name": "feet_contact"},
+  ),
+  "all_feet_airborne": ObservationTermCfg(
+    func=mdp.all_feet_airborne,
+    params={"sensor_name": "feet_contact"},
   ),
 }
 

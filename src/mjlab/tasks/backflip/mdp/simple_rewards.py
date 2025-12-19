@@ -55,38 +55,12 @@ def off_axis_simple(env, asset_cfg=_DEFAULT_ASSET_CFG):
 
 
 def backflip_progress_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
-  """Reward actual backflip progress with milestone bonuses."""
-  asset = env.scene[asset_cfg.name]
-  command = env.command_manager.get_command(command_name)
-  time_phase = command[:, 0]
+  """Reward phase-based backflip progress (must achieve phases in sequence)."""
+  command_term = env.command_manager.get_term(command_name)
 
-  proj_grav = asset.data.projected_gravity_b
-  grav_x = proj_grav[:, 0]
-  grav_z = proj_grav[:, 2]
+  # Get phase progress from command metrics (0.0 -> 0.1 -> 0.25 -> 0.5 -> 0.75 -> 1.0)
+  phase_progress = command_term.metrics["max_rotation_progress"]
 
-  # Rotation angle from upright (0 at start, π at inverted, 2π back to upright)
-  rotation_angle = torch.atan2(grav_x, -grav_z)
-  rotation_progress = torch.where(
-    rotation_angle >= 0,
-    rotation_angle / (2 * math.pi),
-    (rotation_angle + 2 * math.pi) / (2 * math.pi)
-  )
-
-  current_height = asset.data.root_link_pos_w[:, 2]
-
-  # Milestones
-  crouch_achieved = (current_height < 0.25).float() * (time_phase < 0.2).float()
-  jump_achieved = (current_height > 0.5).float() * (time_phase > 0.2).float()
-  past_vertical = (rotation_progress > 0.25).float()
-  inverted = ((rotation_progress > 0.4) & (rotation_progress < 0.6)).float()
-  past_inverted = (rotation_progress > 0.5).float()
-
-  milestone_bonus = (
-    0.1 * crouch_achieved +
-    0.2 * jump_achieved +
-    0.3 * past_vertical +
-    0.5 * inverted +
-    1.0 * past_inverted
-  )
-
-  return rotation_progress + milestone_bonus
+  # Reward is simply the phase progress value
+  # 0.0 = nothing, 0.1 = crouched, 0.25 = took off, 0.5 = past vertical, 0.75 = inverted, 1.0 = landing
+  return phase_progress
