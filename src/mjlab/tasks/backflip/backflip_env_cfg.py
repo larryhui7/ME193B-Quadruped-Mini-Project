@@ -60,6 +60,7 @@ def create_backflip_env_cfg(
     standing_height=0.35,
     peak_height=0.7,
     flip_duration=0.8,
+    foot_site_names=("FR", "FL", "RR", "RL"),
 ):
     scene = deepcopy(SCENE_CFG)
 
@@ -141,6 +142,9 @@ def create_backflip_env_cfg(
         ),
     }
 
+    # Privileged critic observations (foot-related)
+    feet_sensor_name = feet_sensor_cfg.name
+
     critic_terms = {
         **policy_terms,
         "target_pitch": ObservationTermCfg(
@@ -149,6 +153,19 @@ def create_backflip_env_cfg(
         ),
         "base_orientation_quat": ObservationTermCfg(
             func=mdp.base_orientation_quat,
+        ),
+        # Privileged foot observations (critic only)
+        "foot_height": ObservationTermCfg(
+            func=mdp.foot_height,
+            params={"asset_cfg": SceneEntityCfg("robot", site_names=foot_site_names)},
+        ),
+        "foot_air_time": ObservationTermCfg(
+            func=mdp.foot_air_time,
+            params={"sensor_name": feet_sensor_name},
+        ),
+        "foot_contact": ObservationTermCfg(
+            func=mdp.foot_contact,
+            params={"sensor_name": feet_sensor_name},
         ),
     }
 

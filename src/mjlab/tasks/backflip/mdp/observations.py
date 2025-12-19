@@ -78,3 +78,32 @@ def x_error(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
 def cumulative_pitch(env, asset_cfg=_DEFAULT_ASSET_CFG):
   asset = env.scene[asset_cfg.name]
   return asset.data.root_link_ang_vel_b[:, 1:2]
+
+
+# Privileged critic observations (foot-related)
+
+def foot_height(env, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Height of each foot site relative to world frame."""
+  asset = env.scene[asset_cfg.name]
+  return asset.data.site_pos_w[:, asset_cfg.site_ids, 2]
+
+
+def foot_air_time(env, sensor_name):
+  """Time each foot has been in the air."""
+  sensor = env.scene[sensor_name]
+  current_air_time = sensor.data.current_air_time
+  assert current_air_time is not None
+  return current_air_time
+
+
+def foot_contact(env, sensor_name):
+  """Binary contact state for each foot."""
+  sensor = env.scene[sensor_name]
+  return (sensor.data.found > 0).float()
+
+
+def foot_contact_forces(env, sensor_name):
+  """Contact forces on each foot (log-scaled)."""
+  sensor = env.scene[sensor_name]
+  forces_flat = sensor.data.force.flatten(start_dim=1)
+  return torch.sign(forces_flat) * torch.log1p(torch.abs(forces_flat))
