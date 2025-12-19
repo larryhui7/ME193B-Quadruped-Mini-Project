@@ -251,7 +251,7 @@ def create_backflip_env_cfg(
         ),
         "off_axis": RewardTermCfg(
             func=mdp.off_axis_penalty,
-            weight=-2.0,  # Reduced from -5.0 to be less restrictive during flip
+            weight=-8.0,  # Strong penalty to prevent side roll
             params={"asset_cfg": SceneEntityCfg("robot")},
         ),
         "insufficient_rotation": RewardTermCfg(
@@ -273,10 +273,11 @@ def create_backflip_env_cfg(
         ),
         "crouch_incentive": RewardTermCfg(
             func=mdp.crouch_incentive,
-            weight=5.0,
+            weight=8.0,  # Increased to encourage deeper crouch
             params={
                 "standing_height": standing_height,
-                "crouch_steps": 50,
+                "crouch_depth": 0.25,  # Match command generator crouch depth
+                "crouch_steps": 80,  # More time to reach deep crouch
                 "asset_cfg": SceneEntityCfg("robot"),
             },
         ),
@@ -294,6 +295,14 @@ def create_backflip_env_cfg(
             params={
                 "command_name": "backflip",
                 "asset_cfg": SceneEntityCfg("robot"),
+            },
+        ),
+        "foot_height_during_flip": RewardTermCfg(
+            func=mdp.foot_height_during_flip,
+            weight=5.0,  # Reward feet being high off ground during flip
+            params={
+                "command_name": "backflip",
+                "asset_cfg": SceneEntityCfg("robot", site_names=foot_site_names),
             },
         ),
     }

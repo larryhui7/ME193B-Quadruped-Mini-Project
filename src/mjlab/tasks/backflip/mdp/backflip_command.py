@@ -32,10 +32,6 @@ class BackflipPhaseCommand(CommandTerm):
     self.completed = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
     self.initial_x = torch.zeros(self.num_envs, device=self.device)
 
-    # Compute crouch duration in steps
-    self.dt = env.step_dt
-    self.crouch_steps = int(cfg.crouch_duration / self.dt)
-
     self.metrics["max_phase_reached"] = torch.zeros(self.num_envs, device=self.device)
     self.metrics["completed"] = torch.zeros(self.num_envs, device=self.device)
     self.metrics["cumulative_rotation"] = torch.zeros(self.num_envs, device=self.device)
@@ -74,15 +70,13 @@ class BackflipPhaseCommand(CommandTerm):
 
     # Get current height
     current_height = self.robot.data.root_link_pos_w[:, 2]
-    time_steps = self.env.episode_length_buf
 
     # Crouch target height
     crouch_target = self.cfg.standing_height - self.cfg.crouch_depth
 
-    # Crouch is complete when:
-    # 1. Height is below crouch target (actually crouched), OR
-    # 2. Max crouch time exceeded (fallback)
-    crouch_complete = (current_height < crouch_target + 0.02) | (time_steps >= self.crouch_steps)
+    # Crouch is complete ONLY when height is below crouch target (no time fallback)
+    # This ensures the robot actually crouches before we start tracking rotation
+    crouch_complete = current_height < crouch_target + 0.02
 
     # Crouch progress based on height (how far we've descended)
     height_drop = self.cfg.standing_height - current_height
@@ -171,9 +165,8 @@ class BackflipPhaseCommandCfg(CommandTermCfg):
   flip_duration: float = 0.8
   standing_height: float = 0.35
   peak_height: float = 0.7
-  crouch_duration: float = 0.5  # Max time to crouch before flip (seconds)
-  crouch_depth: float = 0.15  # How much to lower during crouch (meters) - deeper for more power
-  backward_distance: float = 0.15  # How far backward the arc goes (meters) - reduced for easier learning
+  crouch_depth: float = 0.25  # How much to lower during crouch (meters) - deeper for more power
+  backward_distance: float = 0.15  # How far backward the arc goes (meters)
   class_type: type = BackflipPhaseCommand
 
   @dataclass

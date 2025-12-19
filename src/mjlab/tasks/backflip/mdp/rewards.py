@@ -116,6 +116,25 @@ def air_time_during_flip(env, command_name, sensor_name):
   return mid_flip_mask * airborne
 
 
+def foot_height_during_flip(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Reward feet being high off the ground during flip phase."""
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+  # Get foot heights (z position of foot sites)
+  foot_heights = asset.data.site_pos_w[:, asset_cfg.site_ids, 2]  # (num_envs, num_feet)
+  avg_foot_height = torch.mean(foot_heights, dim=1)
+
+  # Only reward during flip phase (after crouch)
+  flip_mask = (phase >= 0.1).float()
+
+  # Reward feet being higher (normalized, max reward at ~0.5m)
+  height_reward = torch.clamp(avg_foot_height / 0.5, 0.0, 1.0)
+
+  return flip_mask * height_reward
+
+
 def ground_contact_at_landing(env, command_name, sensor_name):
   sensor = env.scene[sensor_name]
   command = env.command_manager.get_command(command_name)
@@ -153,13 +172,14 @@ def takeoff_impulse(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   return takeoff_mask * upward_reward * rotation_reward * (0.5 + 0.5 * backward_reward)
 
 
-def crouch_incentive(env, standing_height=0.35, crouch_steps=30, asset_cfg=_DEFAULT_ASSET_CFG):
+def crouch_incentive(env, standing_height=0.35, crouch_depth=0.25, crouch_steps=30, asset_cfg=_DEFAULT_ASSET_CFG):
   asset = env.scene[asset_cfg.name]
   current_height = asset.data.root_link_pos_w[:, 2]
 
   early_mask = (env.episode_length_buf < crouch_steps).float()
 
-  crouch_reward = torch.clamp((standing_height - current_height) / 0.15, 0.0, 1.0)
+  # Reward proportional to how much we've crouched toward target depth
+  crouch_reward = torch.clamp((standing_height - current_height) / crouch_depth, 0.0, 1.0)
 
   return early_mask * crouch_reward
 
