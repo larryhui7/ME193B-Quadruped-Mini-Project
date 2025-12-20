@@ -1,3 +1,5 @@
+"""Termination conditions for backflip task."""
+
 from __future__ import annotations
 
 import torch
@@ -8,26 +10,24 @@ _DEFAULT_ASSET_CFG = SceneEntityCfg("robot")
 
 
 def backflip_completed(env, command_name, uprightness_threshold=0.3, min_rotation=1.8 * 3.14159, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Terminate (success) when backflip is complete."""
   asset = env.scene[asset_cfg.name]
   command = env.command_manager.get_command(command_name)
 
-  phase = command[:, 0]
-  cumulative_rotation = command[:, 4]
-  projected_gravity = asset.data.projected_gravity_b
-
-  phase_complete = phase >= 0.9
-  has_rotated = cumulative_rotation <= -min_rotation
-  uprightness_error = torch.sum(projected_gravity[:, :2] ** 2, dim=1)
+  phase_complete = command[:, 0] >= 0.9
+  has_rotated = command[:, 4] <= -min_rotation
+  uprightness_error = torch.sum(asset.data.projected_gravity_b[:, :2] ** 2, dim=1)
   is_upright = uprightness_error < uprightness_threshold
 
   return phase_complete & has_rotated & is_upright
 
 
 def body_contact_during_flip(env, command_name, sensor_name):
+  """Terminate if body contacts ground mid-flip."""
   sensor = env.scene[sensor_name]
   command = env.command_manager.get_command(command_name)
-
   phase = command[:, 0]
+
   has_contact = torch.any(sensor.data.found > 0, dim=1)
   mid_flip = (phase > 0.2) & (phase < 0.8)
 
@@ -35,192 +35,107 @@ def body_contact_during_flip(env, command_name, sensor_name):
 
 
 def height_too_low(env, command_name, min_height=0.15, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Terminate if height drops too low mid-flip."""
   asset = env.scene[asset_cfg.name]
   command = env.command_manager.get_command(command_name)
-
   phase = command[:, 0]
-  height = asset.data.root_link_pos_w[:, 2]
 
   mid_flip = (phase > 0.15) & (phase < 0.75)
-  too_low = height < min_height
+  too_low = asset.data.root_link_pos_w[:, 2] < min_height
 
   return mid_flip & too_low
 
 
 def bad_landing_orientation(env, command_name, limit_angle=1.2, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Terminate if orientation is bad during landing phase."""
   asset = env.scene[asset_cfg.name]
   command = env.command_manager.get_command(command_name)
-
   phase = command[:, 0]
-  projected_gravity = asset.data.projected_gravity_b
 
-  orientation_angle = torch.acos(torch.clamp(-projected_gravity[:, 2], -1.0, 1.0))
-  landing_phase = phase > 0.85
-  bad_orientation = orientation_angle > limit_angle
-
-  return landing_phase & bad_orientation
+  angle = torch.acos(torch.clamp(-asset.data.projected_gravity_b[:, 2], -1.0, 1.0))
+  return (phase > 0.85) & (angle > limit_angle)
 
 
 def no_progress(env, command_name, min_phase_by_time=0.5, time_threshold=1.0):
+  """Terminate if not making progress."""
   command = env.command_manager.get_command(command_name)
-
   phase = command[:, 0]
-  episode_length = env.episode_length_buf * env.step_dt
-  expected_phase = episode_length / time_threshold * min_phase_by_time
+  episode_time = env.episode_length_buf * env.step_dt
+  expected = episode_time / time_threshold * min_phase_by_time
 
-  return (episode_length > time_threshold) & (phase < expected_phase * 0.5)
+  return (episode_time > time_threshold) & (phase < expected * 0.5)
 
 
 def excessive_rotation(env, max_roll=1.0, max_yaw_rate=5.0, asset_cfg=_DEFAULT_ASSET_CFG):
+  """Terminate if excessive roll or yaw."""
   asset = env.scene[asset_cfg.name]
-
-  proj_grav = asset.data.projected_gravity_b
-  roll_error = torch.abs(proj_grav[:, 1])
+  roll = torch.abs(asset.data.projected_gravity_b[:, 1])
   yaw_rate = torch.abs(asset.data.root_link_ang_vel_b[:, 2])
-
-  excessive_roll = roll_error > max_roll
-  excessive_yaw = yaw_rate > max_yaw_rate
-
-  return excessive_roll | excessive_yaw
+  return (roll > max_roll) | (yaw_rate > max_yaw_rate)
 
 
 def failed_takeoff(env, command_name, check_phase=0.45, min_height=0.50):
-  """
-  Terminate early if robot hasn't achieved minimum height by check_phase.
-
-  This prevents wasting compute on episodes where the robot failed to jump.
-
-  Args:
-    check_phase: Phase at which to check (default 0.45 = after takeoff should be complete)
-    min_height: Minimum max_height that should have been achieved by check_phase
-  """
+  """Terminate if robot hasn't jumped high enough by check_phase."""
   command_term = env.command_manager.get_term(command_name)
   command = env.command_manager.get_command(command_name)
 
   phase = command[:, 0]
   max_height = command_term.metrics["max_height"]
 
-  # Only check after we've passed the check phase
-  past_check_phase = phase >= check_phase
-
-  # Failed if max height is below threshold
-  height_too_low = max_height < min_height
-
-  return past_check_phase & height_too_low
+  return (phase >= check_phase) & (max_height < min_height)
 
 
 def landed_upside_down(env, sensor_name, min_height=0.25, asset_cfg=_DEFAULT_ASSET_CFG):
-  """
-  Terminate if robot lands upside down (inverted and on ground).
-
-  Checks if:
-  1. Robot is low (height < min_height) or has foot contact
-  2. Robot is inverted (projected gravity z > 0.5)
-
-  Args:
-    min_height: Height threshold to consider "on ground"
-  """
+  """Terminate if robot lands inverted (grav_z > 0.5)."""
   asset = env.scene[asset_cfg.name]
   sensor = env.scene[sensor_name]
 
-  # Check if on ground (low height OR foot contact)
-  current_height = asset.data.root_link_pos_w[:, 2]
-  height_low = current_height < min_height
-
+  height = asset.data.root_link_pos_w[:, 2]
   any_contact = (sensor.data.found > 0).any(dim=-1)
-  on_ground = height_low | any_contact
+  on_ground = (height < min_height) | any_contact
 
-  # Check if inverted (gravity z in body frame > 0.5 means significantly upside down)
-  # When upright: proj_grav_z ≈ -1
-  # When inverted: proj_grav_z ≈ +1
-  proj_grav_z = asset.data.projected_gravity_b[:, 2]
-  is_inverted = proj_grav_z > 0.5
+  grav_z = asset.data.projected_gravity_b[:, 2]
+  is_inverted = grav_z > 0.5
 
   return on_ground & is_inverted
 
 
 def insufficient_rotation(env, command_name, check_phase=0.65, min_rotation_progress=0.5):
-  """
-  Terminate if robot hasn't rotated past 180 degrees by check_phase.
-
-  Uses the max_rotation_progress metric from the command generator:
-  - 0.25 = airborne
-  - 0.5 = past 180 degrees (inverted)
-  - 0.75 = past 270 degrees
-
-  Args:
-    check_phase: Phase at which to check rotation (default 0.65)
-    min_rotation_progress: Minimum rotation progress required (0.5 = 180 degrees)
-  """
+  """Terminate if rotation progress is below threshold at check_phase."""
   command_term = env.command_manager.get_term(command_name)
   command = env.command_manager.get_command(command_name)
 
   phase = command[:, 0]
-  rotation_progress = command_term.metrics["max_rotation_progress"]
+  progress = command_term.metrics["max_rotation_progress"]
 
-  # Only check after we've passed the check phase
-  past_check_phase = phase >= check_phase
-
-  # Failed if rotation progress is below threshold
-  not_enough_rotation = rotation_progress < min_rotation_progress
-
-  return past_check_phase & not_enough_rotation
+  return (phase >= check_phase) & (progress < min_rotation_progress)
 
 
 def wrong_direction_takeoff(env, command_name, check_phase=0.35, max_forward_pitch=0.3):
-  """
-  Terminate if robot is pitching forward (frontflip direction) during takeoff.
-
-  Uses cumulative pitch from command generator:
-  - Negative = backflip direction (good)
-  - Positive = frontflip direction (bad)
-
-  Args:
-    check_phase: Phase at which to check direction (default 0.35)
-    max_forward_pitch: Maximum allowed forward pitch in radians (default 0.3 ~ 17°)
-  """
+  """Terminate if pitching forward (frontflip) instead of backward."""
   command_term = env.command_manager.get_term(command_name)
   command = env.command_manager.get_command(command_name)
 
   phase = command[:, 0]
   cumulative_pitch = command_term.cumulative_pitch
 
-  # Only check after takeoff phase
-  past_check_phase = phase >= check_phase
-
-  # Bad if cumulative pitch is positive (frontflip) beyond threshold
-  wrong_direction = cumulative_pitch > max_forward_pitch
-
-  return past_check_phase & wrong_direction
+  return (phase >= check_phase) & (cumulative_pitch > max_forward_pitch)
 
 
 def bad_landing(env, sensor_name, command_name, min_uprightness=-0.7, min_height=0.20, asset_cfg=_DEFAULT_ASSET_CFG):
-  """
-  Terminate if robot lands poorly (not upright enough OR body too low).
-
-  Args:
-    min_uprightness: Minimum proj_grav_z to be considered upright (default -0.7)
-                     -1.0 = perfectly upright, 0 = horizontal, +1 = inverted
-    min_height: Minimum body height at landing (default 0.20m)
-  """
+  """Terminate if robot lands poorly (not upright or body too low)."""
   asset = env.scene[asset_cfg.name]
   sensor = env.scene[sensor_name]
   command = env.command_manager.get_command(command_name)
 
   phase = command[:, 0]
+  in_landing = phase >= 0.9
 
-  # Only check during landing phase (near end of episode)
-  in_landing_phase = phase >= 0.9
-
-  # Check if has foot contact OR body is low (handles tummy landings where feet don't touch)
   any_contact = (sensor.data.found > 0).any(dim=-1)
-  current_height = asset.data.root_link_pos_w[:, 2]
-  too_low = current_height < min_height
-  on_ground = any_contact | too_low
+  height = asset.data.root_link_pos_w[:, 2]
+  on_ground = any_contact | (height < min_height)
 
-  # Check if not upright enough
-  proj_grav_z = asset.data.projected_gravity_b[:, 2]
-  not_upright = proj_grav_z > min_uprightness
+  grav_z = asset.data.projected_gravity_b[:, 2]
+  not_upright = grav_z > min_uprightness
 
-  # Bad landing = on ground AND not upright
-  return in_landing_phase & on_ground & not_upright
+  return in_landing & on_ground & not_upright
