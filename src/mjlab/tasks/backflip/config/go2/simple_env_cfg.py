@@ -218,6 +218,11 @@ rewards = {
     weight=4.0,
     params={"sensor_name": "feet_contact", "min_height": 0.40, "asset_cfg": SceneEntityCfg("robot")},
   ),
+  "backward_takeoff": RewardTermCfg(
+    func=simple_rewards.backward_takeoff_reward,
+    weight=5.0,  # Strong incentive to pitch backward during takeoff
+    params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
+  ),
 
   # === PROGRESS REWARDS (track overall backflip completion) ===
   "backflip_progress": RewardTermCfg(
@@ -274,6 +279,11 @@ terminations = {
     func=mdp.failed_takeoff,
     time_out=False,
     params={"command_name": "backflip", "check_phase": 0.45, "min_height": 0.45},
+  ),
+  "wrong_direction": TerminationTermCfg(
+    func=mdp.wrong_direction_takeoff,
+    time_out=False,
+    params={"command_name": "backflip", "check_phase": 0.35, "max_forward_pitch": 0.3},
   ),
   "insufficient_rotation": TerminationTermCfg(
     func=mdp.insufficient_rotation,

@@ -222,6 +222,31 @@ def leg_extension_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   return torch.where(in_takeoff, extension, torch.zeros_like(extension))
 
 
+def backward_takeoff_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Reward backward pitch during takeoff phase.
+
+  This encourages the robot to lean back (nose up) during takeoff,
+  which is essential for initiating a backflip. Without this, the
+  rear legs often push harder and cause a forward pitch.
+  """
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+
+  # During takeoff phase (0.10 to 0.35), reward backward pitch
+  in_takeoff = (phase >= 0.10) & (phase < 0.35)
+
+  # Pitch rate: negative = backward (backflip direction)
+  pitch_rate = asset.data.root_link_ang_vel_b[:, 1]
+
+  # Reward negative pitch rate (backward rotation)
+  reward = torch.clamp(-pitch_rate / 5.0, 0.0, 1.0)
+
+  return torch.where(in_takeoff, reward, torch.zeros_like(reward))
+
+
 def crouch_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   """
   Reward crouching (lowering height) during crouch phase.

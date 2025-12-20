@@ -167,6 +167,33 @@ def insufficient_rotation(env, command_name, check_phase=0.65, min_rotation_prog
   return past_check_phase & not_enough_rotation
 
 
+def wrong_direction_takeoff(env, command_name, check_phase=0.35, max_forward_pitch=0.3):
+  """
+  Terminate if robot is pitching forward (frontflip direction) during takeoff.
+
+  Uses cumulative pitch from command generator:
+  - Negative = backflip direction (good)
+  - Positive = frontflip direction (bad)
+
+  Args:
+    check_phase: Phase at which to check direction (default 0.35)
+    max_forward_pitch: Maximum allowed forward pitch in radians (default 0.3 ~ 17°)
+  """
+  command_term = env.command_manager.get_term(command_name)
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+  cumulative_pitch = command_term.cumulative_pitch
+
+  # Only check after takeoff phase
+  past_check_phase = phase >= check_phase
+
+  # Bad if cumulative pitch is positive (frontflip) beyond threshold
+  wrong_direction = cumulative_pitch > max_forward_pitch
+
+  return past_check_phase & wrong_direction
+
+
 def bad_landing(env, sensor_name, command_name, min_uprightness=-0.7, min_height=0.20, asset_cfg=_DEFAULT_ASSET_CFG):
   """
   Terminate if robot lands poorly (not upright enough OR body too low).
