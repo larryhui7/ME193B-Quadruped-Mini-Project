@@ -37,9 +37,8 @@ class SimpleBackflipCommand(CommandTerm):
     self.metrics["max_height"] = torch.zeros(self.num_envs, device=self.device)
     # Store starting x position for relative trajectory
     self.start_x = torch.zeros(self.num_envs, device=self.device)
-    # Track if robot has gone through backflip first half (grav_x < 0)
-    # This prevents frontflip from getting credit
-    self.backflip_started = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
+    # Track cumulative pitch rotation (negative = backflip, positive = frontflip)
+    self.cumulative_pitch = torch.zeros(self.num_envs, device=self.device)
     # Optional feet sensor for airborne detection
     self.feet_sensor = None
     if cfg.feet_sensor_name is not None:
@@ -51,44 +50,19 @@ class SimpleBackflipCommand(CommandTerm):
 
   def _update_metrics(self):
     import math
-    proj_grav = self.robot.data.projected_gravity_b
-    grav_x = proj_grav[:, 0]
-    grav_z = proj_grav[:, 2]
 
-    # Simpler approach: track rotation based on quadrant
-    # Backflip goes: Q1 (upright) -> Q2 (nose up) -> Q3 (inverted) -> Q4 (nose down) -> Q1
-    # Q1: grav_x >= 0, grav_z <= 0 (upright, or small forward lean) -> 0 or ~1.0
-    # Q2: grav_x < 0, grav_z <= 0 (backward pitch, nose up) -> 0 to 0.25
-    # Q3: grav_x < 0, grav_z > 0 (past vertical, approaching inverted) -> 0.25 to 0.5
-    # Q4: grav_x >= 0, grav_z > 0 (past inverted, coming back) -> 0.5 to 0.75
-    # Then back to Q1 -> 0.75 to 1.0
+    # Simple approach: integrate pitch rate to track cumulative rotation
+    # Pitch rate is Y-axis angular velocity in body frame
+    # NEGATIVE pitch rate = backflip (nose up first)
+    # POSITIVE pitch rate = frontflip (nose down first)
+    pitch_rate = self.robot.data.root_link_ang_vel_b[:, 1]
+    self.cumulative_pitch = self.cumulative_pitch + pitch_rate * self.dt
 
-    # First half: nose up (grav_x < 0) - this is the BACKFLIP direction
-    in_first_half = grav_x < 0
-    # Track that robot has gone through backflip direction (prevents frontflip credit)
-    # ONLY count as backflip start if grav_x < 0 AND grav_z <= 0 (nose up, BEFORE vertical)
-    # This prevents frontflip from setting the flag when it passes through grav_x < 0 AFTER inverted
-    in_backflip_first_quarter = (grav_x < 0) & (grav_z <= 0)
-    self.backflip_started = self.backflip_started | in_backflip_first_quarter
-
-    # Angle from upright toward inverted (0 to π)
-    first_half_angle = torch.atan2(-grav_x, -grav_z)  # 0 at upright, π at inverted
-    first_half_frac = torch.clamp(first_half_angle / math.pi, 0.0, 1.0) * 0.5
-
-    # Second half (180°-270°): past inverted, coming back (grav_x >= 0 AND grav_z >= 0)
-    # ONLY count if robot went through first half (backflip direction) first!
-    in_second_half = (grav_x >= 0) & (grav_z >= 0) & self.backflip_started
-    # Angle from inverted toward 270°
-    second_half_angle = torch.atan2(grav_x, grav_z)  # 0 at inverted, π/2 at 270°
-    second_half_frac = 0.5 + torch.clamp(second_half_angle / math.pi, 0.0, 0.5)
-
-    # Note: Final quarter (270°-360°) is handled by landing phase when on_ground
-    # We don't track it here to avoid giving credit for forward pitch at start
-
-    # Combine: second half if applicable, else first half, else 0 (forward pitch/frontflip)
-    rotation_frac = torch.where(in_second_half, second_half_frac,
-                   torch.where(in_first_half, first_half_frac,
-                              torch.zeros_like(grav_x)))
+    # For backflip, cumulative_pitch goes negative (full backflip = -2π)
+    # Convert to progress: 0 at start, 1 at full rotation
+    # Only count negative rotation (backflip direction)
+    backflip_rotation = torch.clamp(-self.cumulative_pitch, 0.0, 2.0 * math.pi)
+    rotation_frac = backflip_rotation / (2.0 * math.pi)
 
     current_height = self.robot.data.root_link_pos_w[:, 2]
     self.metrics["max_height"] = torch.maximum(self.metrics["max_height"], current_height)
@@ -156,6 +130,7 @@ class SimpleBackflipCommand(CommandTerm):
     flip_done = new_progress >= 0.75
     in_landing_phase = flip_done & (current_progress < 1.0)
     # Landing progress: upright (grav_z close to -1) and on ground
+    grav_z = self.robot.data.projected_gravity_b[:, 2]
     upright_frac = torch.clamp((-grav_z - 0.5) / 0.5, 0.0, 1.0)  # grav_z: -1=upright, 1=inverted
     on_ground = ~is_airborne
     landing_progress = 0.75 + 0.25 * upright_frac
@@ -168,8 +143,8 @@ class SimpleBackflipCommand(CommandTerm):
     # Reset metrics on episode reset
     self.metrics["max_rotation_progress"][env_ids] = 0.0
     self.metrics["max_height"][env_ids] = 0.0
-    # Reset backflip direction tracking
-    self.backflip_started[env_ids] = False
+    # Reset cumulative pitch tracking
+    self.cumulative_pitch[env_ids] = 0.0
     # Store starting x position for relative trajectory
     self.start_x[env_ids] = self.robot.data.root_link_pos_w[env_ids, 0]
     self._update_reference(env_ids)

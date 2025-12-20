@@ -133,6 +133,18 @@ def all_feet_airborne(env, sensor_name):
   return (~any_contact).float()
 
 
+def rotation_progress(env, command_name):
+  """Actual rotation progress from command metrics (0 to 1)."""
+  command_term = env.command_manager.get_term(command_name)
+  return command_term.metrics["max_rotation_progress"].unsqueeze(-1)
+
+
+def cumulative_pitch_rotation(env, command_name):
+  """Cumulative pitch rotation in radians (negative = backflip)."""
+  command_term = env.command_manager.get_term(command_name)
+  return command_term.cumulative_pitch.unsqueeze(-1)
+
+
 def foot_contact_forces(env, sensor_name):
   """Contact forces on each foot (log-scaled)."""
   sensor = env.scene[sensor_name]
