@@ -212,18 +212,15 @@ def bad_landing(env, sensor_name, command_name, min_uprightness=-0.7, min_height
   # Only check during landing phase (near end of episode)
   in_landing_phase = phase >= 0.9
 
-  # Check if has foot contact
+  # Check if has foot contact OR body is low (handles tummy landings where feet don't touch)
   any_contact = (sensor.data.found > 0).any(dim=-1)
+  current_height = asset.data.root_link_pos_w[:, 2]
+  too_low = current_height < min_height
+  on_ground = any_contact | too_low
 
   # Check if not upright enough
   proj_grav_z = asset.data.projected_gravity_b[:, 2]
   not_upright = proj_grav_z > min_uprightness
 
-  # Check if body too low (landed flat)
-  current_height = asset.data.root_link_pos_w[:, 2]
-  too_low = current_height < min_height
-
-  # Bad landing = not upright OR body too low
-  bad = not_upright | too_low
-
-  return in_landing_phase & any_contact & bad
+  # Bad landing = on ground AND not upright
+  return in_landing_phase & on_ground & not_upright

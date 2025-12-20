@@ -257,6 +257,11 @@ rewards = {
     weight=5.0,  # Strong incentive to stand tall at the end
     params={"command_name": "backflip", "standing_height": 0.35, "asset_cfg": SceneEntityCfg("robot")},
   ),
+  "landing_prep": RewardTermCfg(
+    func=simple_rewards.landing_preparation_reward,
+    weight=3.0,  # Encourage untucking legs during descent
+    params={"command_name": "backflip", "asset_cfg": SceneEntityCfg("robot")},
+  ),
 
   # === REGULARIZATION (prevent flailing) ===
   "off_axis": RewardTermCfg(

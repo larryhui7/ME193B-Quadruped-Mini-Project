@@ -277,6 +277,40 @@ def stand_up_reward(env, command_name, standing_height=0.35, asset_cfg=_DEFAULT_
   return torch.where(in_landing, reward, torch.zeros_like(reward))
 
 
+def landing_preparation_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Reward extending legs during descent to prepare for landing.
+
+  During descent phase (0.60 to 0.90), reward legs being extended (not tucked).
+  This encourages the robot to untuck and prepare to absorb the landing.
+
+  Calf joints: more negative = more bent/tucked, less negative = straighter/extended
+  """
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+
+  # During descent/pre-landing phase
+  in_descent = (phase >= 0.60) & (phase < 0.90)
+
+  # Calf joint indices: 2, 5, 8, 11 (every 3rd joint starting from 2)
+  calf_indices = [2, 5, 8, 11]
+  calf_positions = asset.data.joint_pos[:, calf_indices]
+
+  # Average calf angle
+  # Tucked: around -2.6 (very bent)
+  # Standing: around -1.8
+  # Extended for landing: around -1.0 to -1.5
+  avg_calf = calf_positions.mean(dim=1)
+
+  # Reward less bent legs (higher values = more extended)
+  # -2.6 (tucked) -> 0.0, -1.0 (extended) -> 1.0
+  extension = torch.clamp((avg_calf + 2.6) / 1.6, 0.0, 1.0)
+
+  return torch.where(in_descent, extension, torch.zeros_like(extension))
+
+
 def crouch_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   """
   Reward crouching (lowering height) during crouch phase.
