@@ -83,7 +83,7 @@ commands = {
     asset_name="robot",
     feet_sensor_name="feet_contact",
     resampling_time_range=(100.0, 100.0),
-    flip_duration=1.0,
+    flip_duration=1.5,
     standing_height=0.35,
     crouch_height=0.18,
     peak_height=0.90,
@@ -252,6 +252,11 @@ rewards = {
     weight=3.0,
     params={"sensor_name": "feet_contact", "scale": 8.0, "asset_cfg": SceneEntityCfg("robot")},
   ),
+  "stand_up": RewardTermCfg(
+    func=simple_rewards.stand_up_reward,
+    weight=5.0,  # Strong incentive to stand tall at the end
+    params={"command_name": "backflip", "standing_height": 0.35, "asset_cfg": SceneEntityCfg("robot")},
+  ),
 
   # === REGULARIZATION (prevent flailing) ===
   "off_axis": RewardTermCfg(
@@ -313,5 +318,5 @@ SIMPLE_GO2_BACKFLIP_ENV_CFG = ManagerBasedRlEnvCfg(
   sim=SIM_CFG,
   viewer=VIEWER_CONFIG,
   decimation=2,
-  episode_length_s=1.5,
+  episode_length_s=2.0,
 )

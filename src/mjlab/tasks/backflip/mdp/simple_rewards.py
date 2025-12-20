@@ -247,6 +247,36 @@ def backward_takeoff_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   return torch.where(in_takeoff, reward, torch.zeros_like(reward))
 
 
+def stand_up_reward(env, command_name, standing_height=0.35, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Reward standing up tall at the end of the flip.
+
+  During landing phase (phase > 0.85), reward:
+  1. Being upright (grav_z close to -1)
+  2. Being at standing height
+  """
+  asset = env.scene[asset_cfg.name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+
+  # Only during landing phase
+  in_landing = phase >= 0.85
+
+  # Upright reward (grav_z = -1 is upright)
+  grav_z = asset.data.projected_gravity_b[:, 2]
+  upright_reward = torch.clamp((-grav_z - 0.5) / 0.5, 0.0, 1.0)
+
+  # Height reward (closer to standing height is better)
+  current_height = asset.data.root_link_pos_w[:, 2]
+  height_reward = torch.clamp(current_height / standing_height, 0.0, 1.0)
+
+  # Combined reward
+  reward = upright_reward * height_reward
+
+  return torch.where(in_landing, reward, torch.zeros_like(reward))
+
+
 def crouch_reward(env, command_name, asset_cfg=_DEFAULT_ASSET_CFG):
   """
   Reward crouching (lowering height) during crouch phase.
