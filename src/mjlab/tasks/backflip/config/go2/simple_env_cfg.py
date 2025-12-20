@@ -158,6 +158,14 @@ critic_terms = {
     func=mdp.all_feet_airborne,
     params={"sensor_name": "feet_contact"},
   ),
+  "rotation_progress": ObservationTermCfg(
+    func=mdp.rotation_progress,
+    params={"command_name": "backflip"},
+  ),
+  "cumulative_pitch": ObservationTermCfg(
+    func=mdp.cumulative_pitch_rotation,
+    params={"command_name": "backflip"},
+  ),
 }
 
 observations = {
