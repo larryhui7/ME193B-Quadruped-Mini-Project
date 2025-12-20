@@ -37,6 +37,9 @@ class SimpleBackflipCommand(CommandTerm):
     self.metrics["max_height"] = torch.zeros(self.num_envs, device=self.device)
     # Store starting x position for relative trajectory
     self.start_x = torch.zeros(self.num_envs, device=self.device)
+    # Track if robot has gone through backflip first half (grav_x < 0)
+    # This prevents frontflip from getting credit
+    self.backflip_started = torch.zeros(self.num_envs, dtype=torch.bool, device=self.device)
     # Optional feet sensor for airborne detection
     self.feet_sensor = None
     if cfg.feet_sensor_name is not None:
@@ -60,14 +63,18 @@ class SimpleBackflipCommand(CommandTerm):
     # Q4: grav_x >= 0, grav_z > 0 (past inverted, coming back) -> 0.5 to 0.75
     # Then back to Q1 -> 0.75 to 1.0
 
-    # First half: nose up (grav_x < 0)
+    # First half: nose up (grav_x < 0) - this is the BACKFLIP direction
     in_first_half = grav_x < 0
+    # Track that robot has gone through backflip direction (prevents frontflip credit)
+    self.backflip_started = self.backflip_started | in_first_half
+
     # Angle from upright toward inverted (0 to π)
     first_half_angle = torch.atan2(-grav_x, -grav_z)  # 0 at upright, π at inverted
     first_half_frac = torch.clamp(first_half_angle / math.pi, 0.0, 1.0) * 0.5
 
     # Second half (180°-270°): past inverted, coming back (grav_x >= 0 AND grav_z >= 0)
-    in_second_half = (grav_x >= 0) & (grav_z >= 0)
+    # ONLY count if robot went through first half (backflip direction) first!
+    in_second_half = (grav_x >= 0) & (grav_z >= 0) & self.backflip_started
     # Angle from inverted toward 270°
     second_half_angle = torch.atan2(grav_x, grav_z)  # 0 at inverted, π/2 at 270°
     second_half_frac = 0.5 + torch.clamp(second_half_angle / math.pi, 0.0, 0.5)
@@ -75,7 +82,7 @@ class SimpleBackflipCommand(CommandTerm):
     # Note: Final quarter (270°-360°) is handled by landing phase when on_ground
     # We don't track it here to avoid giving credit for forward pitch at start
 
-    # Combine: second half if applicable, else first half, else 0 (forward pitch)
+    # Combine: second half if applicable, else first half, else 0 (forward pitch/frontflip)
     rotation_frac = torch.where(in_second_half, second_half_frac,
                    torch.where(in_first_half, first_half_frac,
                               torch.zeros_like(grav_x)))
@@ -158,6 +165,8 @@ class SimpleBackflipCommand(CommandTerm):
     # Reset metrics on episode reset
     self.metrics["max_rotation_progress"][env_ids] = 0.0
     self.metrics["max_height"][env_ids] = 0.0
+    # Reset backflip direction tracking
+    self.backflip_started[env_ids] = False
     # Store starting x position for relative trajectory
     self.start_x[env_ids] = self.robot.data.root_link_pos_w[env_ids, 0]
     self._update_reference(env_ids)

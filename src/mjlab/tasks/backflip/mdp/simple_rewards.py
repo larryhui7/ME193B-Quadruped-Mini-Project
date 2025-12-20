@@ -123,11 +123,12 @@ def pitch_velocity_reward(env, sensor_name, scale=10.0, asset_cfg=_DEFAULT_ASSET
   is_airborne = ~any_contact
 
   # Pitch rate: Y-axis angular velocity in body frame
-  # Positive pitch rate = backward rotation (for backflip)
+  # NEGATIVE pitch rate = backward rotation (nose up first = backflip)
+  # Right-hand rule: Y points left, negative rotation = nose goes up
   pitch_rate = asset.data.root_link_ang_vel_b[:, 1]
 
-  # Only reward positive (backward) pitch rate, and only while airborne
-  reward = torch.clamp(pitch_rate / scale, 0.0, 1.0)
+  # Reward NEGATIVE pitch rate (backflip direction), only while airborne
+  reward = torch.clamp(-pitch_rate / scale, 0.0, 1.0)
   return torch.where(is_airborne, reward, torch.zeros_like(reward))
 
 
