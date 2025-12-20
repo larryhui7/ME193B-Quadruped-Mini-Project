@@ -277,6 +277,11 @@ terminations = {
     time_out=False,
     params={"sensor_name": "feet_contact", "min_height": 0.25, "asset_cfg": SceneEntityCfg("robot")},
   ),
+  "bad_landing": TerminationTermCfg(
+    func=mdp.bad_landing,
+    time_out=False,
+    params={"sensor_name": "feet_contact", "command_name": "backflip", "min_uprightness": -0.7, "min_height": 0.20, "asset_cfg": SceneEntityCfg("robot")},
+  ),
 }
 
 SIMPLE_GO2_BACKFLIP_ENV_CFG = ManagerBasedRlEnvCfg(

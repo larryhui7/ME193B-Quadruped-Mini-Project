@@ -165,3 +165,38 @@ def insufficient_rotation(env, command_name, check_phase=0.65, min_rotation_prog
   not_enough_rotation = rotation_progress < min_rotation_progress
 
   return past_check_phase & not_enough_rotation
+
+
+def bad_landing(env, sensor_name, command_name, min_uprightness=-0.7, min_height=0.20, asset_cfg=_DEFAULT_ASSET_CFG):
+  """
+  Terminate if robot lands poorly (not upright enough OR body too low).
+
+  Args:
+    min_uprightness: Minimum proj_grav_z to be considered upright (default -0.7)
+                     -1.0 = perfectly upright, 0 = horizontal, +1 = inverted
+    min_height: Minimum body height at landing (default 0.20m)
+  """
+  asset = env.scene[asset_cfg.name]
+  sensor = env.scene[sensor_name]
+  command = env.command_manager.get_command(command_name)
+
+  phase = command[:, 0]
+
+  # Only check during landing phase (near end of episode)
+  in_landing_phase = phase >= 0.9
+
+  # Check if has foot contact
+  any_contact = (sensor.data.found > 0).any(dim=-1)
+
+  # Check if not upright enough
+  proj_grav_z = asset.data.projected_gravity_b[:, 2]
+  not_upright = proj_grav_z > min_uprightness
+
+  # Check if body too low (landed flat)
+  current_height = asset.data.root_link_pos_w[:, 2]
+  too_low = current_height < min_height
+
+  # Bad landing = not upright OR body too low
+  bad = not_upright | too_low
+
+  return in_landing_phase & any_contact & bad

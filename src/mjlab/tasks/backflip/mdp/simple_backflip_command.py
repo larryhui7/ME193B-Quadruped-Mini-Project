@@ -66,7 +66,10 @@ class SimpleBackflipCommand(CommandTerm):
     # First half: nose up (grav_x < 0) - this is the BACKFLIP direction
     in_first_half = grav_x < 0
     # Track that robot has gone through backflip direction (prevents frontflip credit)
-    self.backflip_started = self.backflip_started | in_first_half
+    # ONLY count as backflip start if grav_x < 0 AND grav_z <= 0 (nose up, BEFORE vertical)
+    # This prevents frontflip from setting the flag when it passes through grav_x < 0 AFTER inverted
+    in_backflip_first_quarter = (grav_x < 0) & (grav_z <= 0)
+    self.backflip_started = self.backflip_started | in_backflip_first_quarter
 
     # Angle from upright toward inverted (0 to π)
     first_half_angle = torch.atan2(-grav_x, -grav_z)  # 0 at upright, π at inverted
